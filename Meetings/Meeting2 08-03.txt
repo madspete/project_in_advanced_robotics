@@ -1,0 +1,3 @@
+Questions:
+- Why is it necessary to teach the robot the trajectory many/10 times, when you could just teach it once? 
+  Should it not be able to replicate the trajectory from a single "teaching"?
