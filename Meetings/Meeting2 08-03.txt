@@ -1,3 +1,27 @@
+Maybe we write something about  what topics each of us is researching, or given some kind of status?
+Maybe we don't have to do it in text, maybe just tell Yiatek at the meeting?
+
 Questions:
 - Why is it necessary to teach the robot the trajectory many/10 times, when you could just teach it once? 
   Should it not be able to replicate the trajectory from a single "teaching"?
+
+Status for the data generation part:
+  In the previous meeting you recommended using point clouds in MATLAB, which is also what i would like to do. 
+  My current idea is that I load in an STL-file in MATLAB and extract the point cloud, 
+  which yields the position of the points. For the rotational part of the data,
+  I want to compute surface normal vectors for each point. These vectors will yield a direction of rotation.
+  To generate force data, i plan to draw some force magnitude from a Gaussian distribution
+  to simulate human variance in data for the same task when training.
+  Likewise, i want to add noise to the positional and rotational datapoints
+  to realisticly simulate human variation in real life kinesthetic teaching.
+
+Questions regarding data generation
+- Which data is relevant to generate for the GMM? (position, rotation, force-magnitude, velocity?)
+- If it is relevant to generate velocities, why is that so, and what does specify? 
+  Is it the magnitude of the velocity in the direction of vector pointing to the origin of the next point?
+  Would it instead not just be enough to simulate a time for each point?
+- Do you have any recommendations for point cloud resolution, or is that surface-specific?
+- Would it be appropriate to add noise from a Gaussian distribution to the position/velocity/time in order to simulate
+  human inaccuracies in kinesthetic teaching? If so, can you recommend any data/paper/book about this?
+- In one of the papers, it is decided to split the data generation and GMM-modelling into 36 different parts. Why is that,
+  and is that something we have to think about as well?
