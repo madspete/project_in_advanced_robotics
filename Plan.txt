@@ -12,10 +12,17 @@ Marcus - Hybrid force/position controller
 Each is researching/searching for background knowledge in their respective task
 
 Week 3 (07/03-13/03):
+Jens - Figured out how to sample a point cloud form and object, and import it into MATLAB
+Mads - LfD for force setimation is now running (Input is time for now)
+Marucs - ?
 
 Week 4 (14/03-20/03):
+Jens - Implementation of force estimation over a surface using formulas from papers -> continues next week
+Mads - Implemented hybrid force-position controller similar to the one in  the paper. Issues with the Inverse kinematics
 
 Week 5 (21/03-27/03):
+Mads - Figure out issue with invers kinematics
+Jens - Continue development of force estimation. Maybe look into adding noise to signal and making a filter for it (What does Yiatek recommend? Does it make sense to do once we have the hardware?)
 
 Week 6 (28/03-03/04):
 Goal: Have simulation running
