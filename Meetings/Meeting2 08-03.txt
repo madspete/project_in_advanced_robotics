@@ -2,6 +2,45 @@ Maybe we write something about  what topics each of us is researching, or given 
 Maybe we don't have to do it in text, maybe just tell Yiatek at the meeting?
 
 Questions:
+
+• What should be input and output for the SEDS model? Should it be position and velocity in cartesian coordinates, that are input and forces as output? Then we would use the GMM on position, velocity and force and then map position and velocity to a given force using GMR?
+SEDS does not use GMR they only use GMM and then optimize the parameters
+SEDS is time independent, which is an advantage
+Output should be contact force. The input could be the material removal rate, if we can estimate that. Otherwise it could be the human input to the robot.
+We need to have focus on the polishing task and have a logical process for it. Take polishig more into account than the learning force-relevant task paper.
+
+• When we want to simulate we should add noise to the measurements, how do we do that, do we add noise to every single measurements or do we add the same amount of noise to all measurements? 
+We can try both. There is no preference.
+
+• The GMM model in matlab gives a warning, is that something that we should take into account or is it not important? “Warning: Failed to converge in 100 iterations during replicate 72 for gmdistribution with 5 components” 
+Yitaek will have a look at the code.
+
+• What is a good strategy to choose the number of components when computing the clusters and should this be done manually or on the fly when the trajectories are generated?
+
+• Which data is relevant to generate for the GMM? (position, rotation, force-magnitude, velocity?)
+We can choose to use rotation if we want to.
+
+• If it is relevant to generate velocities, why is that so, and what does specify? Is it the magnitude of the velocity in the direction of vector pointing to the origin of the next point? Would it instead not just be enough to simulate a time for each point?
+The robot can react faster to velocities than for positions. 
+
+• Do you have any recommendations for point cloud resolution, or is that surface-specific?
+There is no standard. But in the polishing paper they mention the resolution.
+Is porbably object specific.
+
+• Would it be appropriate to add noise from a Gaussian distribution to the position/velocity/time in order to simulate human inaccuracies in kinesthetic teaching? If so, can you recommend any data/paper/book about this?
+Use trail and error. First stage start without noise and then add noise until system breaks.
+Or just assume no noise in point cloud.
+
+• In one of the papers, it is decided to split the data generation and GMM-modelling into 36 different parts. Why is that and is that something we have to think about as well?
+
+ - Figure out how to filter sensor on real robot
+ - We can go to the lab with Yitaek
+ - Should probalby use a low pass filter as the speed of the task is not that high
+
+ - The contact area should also be added to the input as this will improve the contact force
+
+ - Add Yitaek to github.
+
 - Why is it necessary to teach the robot the trajectory many/10 times, when you could just teach it once? 
   Should it not be able to replicate the trajectory from a single "teaching"?
 

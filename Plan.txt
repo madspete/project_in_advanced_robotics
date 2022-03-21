@@ -7,9 +7,10 @@ Research topics
 Week 2 (28/2-06/03):
 Figure out who works on what and start development
 Jens - Point clouds for data generation
-Mads - LfD possibly SEDS/GMM
+Mads - LfD possibly SEDS/GMM - DONE
 Marcus - Hybrid force/position controller
 Each is researching/searching for background knowledge in their respective task
+- DONE
 
 Week 3 (07/03-13/03):
 Jens - Figured out how to sample a point cloud form and object, and import it into MATLAB
