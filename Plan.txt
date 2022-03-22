@@ -27,6 +27,11 @@ Jens - Continue development of force estimation. Maybe look into adding noise to
 
 Week 6 (28/03-03/04):
 Goal: Have simulation running
+Implement force measurement of UR robot in ROS
+Implement lowpass filter in ROS to filter force signal
+Look at implementing hybrid pos/force controller in ROS
+Figure out how to use controller for teaching
+Get force readings from real robot
 
 Week 7:
 
