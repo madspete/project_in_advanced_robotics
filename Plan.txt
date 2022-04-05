@@ -33,18 +33,32 @@ Look at implementing hybrid pos/force controller in ROS
 Figure out how to use controller for teaching
 Get force readings from real robot
 
-Week 7:
+Week 7 (04/04 - 10/04):
+Work on hybrid force/position controller
+Implement GMM GMR in C++
+Implement butterworth filter in C++
+Finish contact area estimation
 
-Week 8:
+Week 8 (11/04-17/04):
+Easter
+Work on controller + GMM/GMR + filter in C++
 
-Week 9:
+Week 9 (18/04-24/04):
+Controller + GMM/GMR + filter finished in C++
 
+Week 10 (25/04-01-05)):
+Test on real robot
 
-Week 10:
+Week 11 (02-05/08/05):
 Prepare demonstration
 
-Week 11:
+
+Week 12 (09/05-15/05):
+09/05 - Demonsttration
+
+After demonstration:
+Finsih up project
 Write report
 
-Week 12:
-Write report
+31/05:
+Hand in report
