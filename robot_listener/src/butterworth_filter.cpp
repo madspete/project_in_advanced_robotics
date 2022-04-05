@@ -30,7 +30,7 @@ vector<double> filter(vector<double>x, vector<double> coeff_b, vector<double> co
 int main()
 {
 	ifstream ifile;
-	ifile.open("/home/marcus/project/ForceTrials/TESTS/wrenchRobotTrial3.txt");
+	ifile.open("/home/marcus/project/ForceTrials/TESTS/wrenchRobotTrial1.txt");
 	vector<vector<double>> input, output;
 
 

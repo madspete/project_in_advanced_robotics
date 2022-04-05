@@ -1,0 +1,15 @@
+Status:
+Good for controller setup/architecture
+Need real robot for testing with force
+Start considering what we actually want to do for the demonstration:
+	
+How do we combine human motion with force contact area.
+Contact area should not be used in the learning. We get forces from learning, then combine contact area with it.
+When teaching only the trajectory should be demonstrated. The contact pressure should be made constant and force should be estimate for entire trajectory.
+Look up force vs material removal.
+Need access to I4.0 lab.
+The story of the project is important. Why we did it -> how we did it -> results -> future work (edge cases, generalization)
+Could compare force controller with contact pressure controller to show contact pressure controller is better.
+When the controller is following the force it should follow the filtered force.
+
+For next meeting we look at the big picture. Have a few slides of presentation ready. What is our story?
