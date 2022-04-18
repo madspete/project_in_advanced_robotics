@@ -1,15 +1,14 @@
 // This code was inspired by: https://github.com/nxsEdson/Butterworth-Filter
 #include <iostream>
-#include <opencv/cv.hpp>
-#include <opencv2/opencv.hpp>
 #include <fstream>
 #include <math.h>
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <vector>
+#include <complex>
 
 using namespace std;
-using namespace cv;
 
 #define PI 3.14159
 

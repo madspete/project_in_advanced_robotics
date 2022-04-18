@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(robot_listener)
+project(trajectory_learning)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -9,15 +9,12 @@ project(robot_listener)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
-  rospy
-  std_msgs
-  std_srvs
-  geometry_msgs
-  tf2_msgs
-  message_filters
-  image_transport
-  ur_dashboard_msgs
+  cartesian_trajectory_interpolation
+  sgaussians
+  mathlib
 )
+
+#find_package(ARMADILLO REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -74,11 +71,10 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-generate_messages(
-   DEPENDENCIES
-   std_msgs
-   ur_dashboard_msgs
-)
+# generate_messages(
+#   DEPENDENCIES
+#   std_msgs
+# )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -112,8 +108,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES robot_listener
- CATKIN_DEPENDS roscpp rospy std_msgs
- image_transport
+ CATKIN_DEPENDS roscpp 
 #  DEPENDS system_lib
 )
 
@@ -128,12 +123,13 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-## Declare a C++ library
-#  add_library(Butterworth-Filter-Design
-#  Butterworth-Filter-Design/Biquad.cpp
-#  Butterworth.cpp
- 
-#  )
+add_library(${PROJECT_NAME}
+  src/gmm_gmr.cpp
+  include/trajectory_learning/gmm_gmr.hpp
+  include/trajectory_learning/demonstrated_trajectories.hpp
+)
+
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} armadillo)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -144,13 +140,8 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(
-  ${PROJECT_NAME}_node 
-  src/robot_listener.cpp
-)
-
-add_executable(
-  butterworth_filter_node 
-  src/butterworth_filter.cpp
+  ${PROJECT_NAME}_gmm
+  src/gmm_gmr_node.cpp
 )
 
 ## Rename C++ executable without prefix
@@ -161,14 +152,11 @@ add_executable(
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(butterworth_filter_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(${PROJECT_NAME}_gmm ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(${PROJECT_NAME}_node
-   ${catkin_LIBRARIES}
- )
- target_link_libraries(butterworth_filter_node
- ${catkin_LIBRARIES}
+target_link_libraries(${PROJECT_NAME}_gmm
+  ${catkin_LIBRARIES}
+  armadillo
+  ${PROJECT_NAME}
 )
-
