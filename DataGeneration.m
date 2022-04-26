@@ -165,13 +165,16 @@ xRand
 % 1. Fit plane to points of circle
 % 2. Calculate normal/orthogonal vector of plane
 % 3. Find all points in point cloud which are a maximum distance of
-%    disc radius from the normal vector to the plane. This is the amount of point cloud
-%    points in the disc at this point. Divide the area with the number of
-%    points to get the area per point in this disc configuration
-% 4. From this, determine the amount of points above or in the plane. 
-%    Multiply this amount of points with the area per points found in step
-%    3 to get the contact area estimation
-% 5. Continue for the remainding points on the trajectory
+%    disc radius from the normal vector to the plane. 
+% 4. Filter out points which are on the other side of the object. This is
+%    done via finding the mean point and filtering out those points that
+%    are further away than the absolute distance from the mean point to the
+%    plane
+% 5. Calculate the unit area of the points, which is how much they each
+%    contribute to the area of the polishing disc.
+% 6. Find out how many points are in contact with the disc. (how?)
+% 7. Multiply the unit area with the amount of points in contact to get the
+%    estimated area
 
 % Step 0: Translate the circle points to the first point on the trajectory.
 % Code is copy paste from last section.
@@ -191,7 +194,7 @@ discXVals = circleCopy(:,1);
 discYVals = circleCopy(:,2);
 discZVals = circleCopy(:,3);
 % Define the matrix for which to solve for the plane parameters
-SLE = [discXVals discYVals ones(size(discZVals))]; % System of Linear Equations
+SLE = [discXVals discYVals ones(size(discZVals),1)]; % System of Linear Equations
 % Operator '\' means solve the system of linear equations for A\B (Ax=B)
 coeffs = SLE\discZVals;
 % Find the min and max of the disc points
@@ -200,6 +203,8 @@ discYRange = [min(discYVals) max(discYVals)];
 % Now, solve for the z-values of the highest and lowest X and Y points
 % using the equation for a plane (Z = Ax + By + C)
 discZRange = [discXRange', discYRange', ones(2,1)] * coeffs;
+
+% Step 2.
 % Finding the center point of the plane
 centerX = mean(discXRange);
 centerY = mean(discYRange);
@@ -209,21 +214,52 @@ centerZ = mean(discZRange);
 % to the middle of the x and y edges of the restricted plane.
 centerXZVal = coeffs(1) * max(discXRange) + coeffs(2) * mean(discYRange) + coeffs(3);
 centerYZVal = coeffs(1) * mean(discXRange) + coeffs(2) * max(discYRange) + coeffs(3);
-zHeightDiff = abs(centerXZVal - centerYZVal);
-xCenterVec = [max(discXRange) mean(discYRange) 0];
-yCenterVec = [mean(discXRange) max(discYRange) zHeightDiff];
-perpVec = cross(xCenterVec,yCenterVec);
+% Vector from the center of the plane to the median points must be the
+% vector from origo to the median points, minus the vector from origo to
+% the center of the plane.
+origoPlaneCenterVec = [centerX, centerY, centerZ];
+origoPlaneXVec = [centerX,max(discYRange),centerXZVal];
+origoPlaneYVec = [max(discXRange),centerY,centerYZVal];
+planeXVec = origoPlaneXVec - origoPlaneCenterVec;
+planeYVec = origoPlaneYVec - origoPlaneCenterVec;
+perpVec = cross(planeYVec,planeXVec);
+% Normalizing the vector
 normVec = perpVec/norm(perpVec);
 
+% Step 3.
 % Select all points from the point cloud which satisfy the radius constraint
-contactPoints = [];
+inRadiusPoints = [];
 for i = 1:size(cloud.Location,1)
     curPoint = cloud.Location(i,:); % Get the ith point cloud point
-    % Compute the perpendicular distance to the plane vector
-    vecToLine = curPoint-perpVec;
+    % Compute the vector from the current point to the center of the plane
+    vecToLine = curPoint-origoPlaneCenterVec;
+    % Compute the perpendicular distance from teh current point to the
+    % plane normal vector
     dist = norm(cross(vecToLine,perpVec))/norm(perpVec);
     if abs(dist) <= R % Point is on circle perimiter or within 
-        contactPoints(end+1,:) = curPoint;
+        inRadiusPoints(end+1,:) = curPoint;
+    end
+end
+
+% Step 4
+% Calculate mean point from found points within the radius constraint
+meanInRadiusPoint = [mean(inRadiusPoints(:,1)),mean(inRadiusPoints(:,2)),mean(inRadiusPoints(:,3))];
+% Define the vector from the mean point to the center of the plane
+meanInRadiusCenterVec = origoPlaneCenterVec - meanInRadiusPoint;
+% Find absolute value of the distance between the point and the plane,
+% which is used as the threshold to filter out the contact points
+% See https://mathinsight.org/distance_point_plane
+meanPointDist = abs(dot(meanInRadiusCenterVec,normVec));
+inContactPoints = [];
+% Iterate through all points to filter them
+for i = 1:size(inRadiusPoints,1)
+    curPoint = inRadiusPoints(i,:); % Get the ith point
+    % Define the vector from the current point to the center of the plane
+    curPointVec = origoPlaneCenterVec - curPoint;
+    % Find absolute value of the distance between the point and the plane
+    curPointDist = abs(dot(curPointVec,normVec));
+    if curPointDist <= meanPointDist
+        inContactPoints(end+1,:) = curPoint;
     end
 end
 
@@ -268,28 +304,62 @@ ylim([datapoints(1,2)-10 datapoints(1,2)+10]);
 zlim([H-2*depth H-depth+depth]);
 view(-45,45); % Change the view of the 3D figure. This is around the x-axis
 plot3(centerX, centerY, centerZ, 'oy')
-plot3(xCenterVec(1),xCenterVec(2),centerXZVal,'oy')
-plot3(yCenterVec(1),yCenterVec(2),centerYZVal,'oy')
+plot3(origoPlaneXVec(1),origoPlaneXVec(2),origoPlaneXVec(3),'oy')
+plot3(origoPlaneYVec(1),origoPlaneYVec(2),origoPlaneYVec(3),'oy')
 quiver3(centerX,centerY,centerZ,normVec(1),normVec(2),normVec(3),'g')
-quiver3(centerX,centerY,centerZ,R,0,0,'g')
-quiver3(centerX,centerY,centerZ,0,R,0,'g')
+quiver3(centerX,centerY,centerZ,planeXVec(1),planeXVec(2),planeXVec(3),'g')
+quiver3(centerX,centerY,centerZ,planeYVec(1),planeYVec(2),planeYVec(3),'g')
 patch([min(discXRange) min(discXRange) max(discXRange) max(discXRange)], ...
       [min(discYRange) max(discYRange) max(discYRange) min(discYRange)], ...
       [min(discZRange) min(discZRange) max(discZRange) max(discZRange)], ...
       'r', 'FaceAlpha', 0.5)
 hold off
 
-% Fourth plot plane with found points
+% Fourth plot plane with found points that satisfy the radius constraint
 figure(4)
 hold on
-xlim([-20 120]);
-ylim([-20 120]);
+xlim([xRand-10 xRand+10]);
+ylim([datapoints(1,2)-10 datapoints(1,2)+10]);
 zlim([-0.5 1.5]);
-view(-45,45); % Change the view of the 3D figure. This is around the x-axis
-plot3(contactPoints(:,1),contactPoints(:,2),contactPoints(:,3),'or')
+view(-45,35); % Change the view of the 3D figure. This is around the x-axis
+plot3(inRadiusPoints(:,1),inRadiusPoints(:,2),inRadiusPoints(:,3),'or')
 patch([min(discXRange) min(discXRange) max(discXRange) max(discXRange)], ...
       [min(discYRange) max(discYRange) max(discYRange) min(discYRange)], ...
       [min(discZRange) min(discZRange) max(discZRange) max(discZRange)], ...
       'r', 'FaceAlpha', 0.5)
 hold off
 
+% Fifth plot plane with filtered radius constraint points
+figure(5)
+hold on
+xlim([xRand-10 xRand+10]);
+ylim([datapoints(1,2)-10 datapoints(1,2)+10]);
+zlim([-0.5 1.5]);
+view(-45,35); % Change the view of the 3D figure. This is around the x-axis
+plot3(inContactPoints(:,1),inContactPoints(:,2),inContactPoints(:,3),'or')
+plot3(meanInRadiusPoint(1),meanInRadiusPoint(2),meanInRadiusPoint(3),'ob')
+patch([min(discXRange) min(discXRange) max(discXRange) max(discXRange)], ...
+      [min(discYRange) max(discYRange) max(discYRange) min(discYRange)], ...
+      [min(discZRange) min(discZRange) max(discZRange) max(discZRange)], ...
+      'r', 'FaceAlpha', 0.5)
+% Plot the normal vector from the mean point to the plane
+quiver3(meanInRadiusPoint(1),meanInRadiusPoint(2),meanInRadiusPoint(3),meaninRadiusNormPlaneVec(1),meaninRadiusNormPlaneVec(2),meaninRadiusNormPlaneVec(3),'g')
+% Plot the normal vector from the last contact point to the plane
+quiver3(inContactPoints(end,1),inContactPoints(end,1),inContactPoints(end,1),curPointNormPlaneVec(1),curPointNormPlaneVec(2),curPointNormPlaneVec(3),'g')
+hold off
+%% NOTES
+% The contact area estimation is given a trajectory from the (GMM/GMR or
+% directly from the recording, probably the former) and estimates a contact
+% force in each point from a specified contact pressure and the estimated
+% contact area in each point. This is what the hybrid force-position
+% controller uses to control the robot
+
+% I need to specify a fitting constant pressure in order to get the forces.
+% I can plot the estimated contact forces in order to see max/min values,
+% such that the robot doesn't press too hard.
+
+% I have to figure out how to correctly correclate the points of the
+% trajectory, which are given in the robots base frame, to me to the model 
+% here in MATLAB. One way is to define the the transformation between the 
+% base frame of the robot, and the frame of the object,
+% which can be measured as an X-Y displacement 
