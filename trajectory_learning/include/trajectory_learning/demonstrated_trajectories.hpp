@@ -26,6 +26,15 @@ public:
     return deomenstrated_trajectories_[index];
   }
 
+  void set_trajectory(unsigned int index, trajectory new_traj)
+  {
+    if (index > deomenstrated_trajectories_.size() - 1)
+    {
+      throw("index out of bounds");
+    }
+    deomenstrated_trajectories_[index] = new_traj;
+  }
+
   unsigned int size()
   {
     return deomenstrated_trajectories_.size();

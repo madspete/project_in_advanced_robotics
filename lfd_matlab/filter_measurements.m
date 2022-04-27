@@ -5,16 +5,12 @@ close all
 %% Filter design 
 
 %% Loaded from data exercise 7
-data = importdata("data\forceData.mat");
+data = importdata("/home/mads/git/project_in_advanced_robotics/wrenchRobotTrial.csv");
 
 figure("Name", "force data")
-plot(data.Time, data.Data(:,1))
-hold on
-plot(data.Time, data.Data(:,2))
-plot(data.Time, data.Data(:,3))
-hold off
+plot(data.Time, data.Data(:,4))
 
-force_measurements = [data.Time, data.Data(:,1), data.Data(:,2), data.Data(:,3)];
+force_measurements = [data.Time, data.Data(:,4)];
 
 %% Force estimated manually
 desired_forcez = data.Time

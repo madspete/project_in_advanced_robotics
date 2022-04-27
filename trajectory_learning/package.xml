@@ -28,6 +28,8 @@
   <depend>cartesian_trajectory_interpolation</depend>
   <depend>sgaussians</depend>
   <depend>mathlib</depend>
+  <depend>hybrid_force_pos_controller</depend>
+  <depend>joint_trajectory_controller</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

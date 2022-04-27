@@ -44,6 +44,7 @@
   <exec_depend>image_transport</exec_depend>
   <depend>butterworth_lib</depend>
   <depend>ur_dashboard_msgs</depend>
+  <depend>sensor_msgs</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

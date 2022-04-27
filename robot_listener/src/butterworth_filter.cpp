@@ -1,126 +1,11 @@
 // This code was inspired by: https://github.com/nxsEdson/Butterworth-Filter
-#include <iostream>
-#include <fstream>
-#include <math.h>
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <vector>
-#include <complex>
+#include <robot_listener/butterworth_filter.hpp>
 
 using namespace std;
 
 #define PI 3.14159
 
-vector<double> ComputeDenCoeffs(int FilterOrder, double Lcutoff, double Ucutoff);
-
-vector<double> TrinomialMultiply(int FilterOrder, vector<double> b, vector<double> c);
-
-vector<double> ComputeNumCoeffs(int FilterOrder, double Lcutoff, double Ucutoff, vector<double> DenC);
-
-vector<double> ComputeLP(int FilterOrder);
-
-vector<double> ComputeHP(int FilterOrder);
-
-//vector<double> filter(int ord, vector<double> a, vector<double> b, int np, vector<double> x);
-
-vector<double> filter(vector<double>x, vector<double> coeff_b, vector<double> coeff_a);
-
-int main()
-{
-	ifstream ifile;
-	ifile.open("/home/marcus/project/ForceTrials/TESTS/wrenchRobotTrial1.txt");
-	vector<vector<double>> input, output;
-
-
-    std::string line, value;
-    int i = 0;
-    vector<double> vec_line;
-    while(std::getline(ifile, line, '\n'))
-    {
-        for (int j = 0; j < 7; j++)
-        {
-            vec_line.push_back(stod(line.substr(0,line.find(","))));
-            line.erase(0,(int)line.find(",")+1);
-        }
-        vec_line.push_back(stod(line));
-        input.push_back(vec_line);
-        vec_line.clear();
-    }
-
-    // for (int j = 0; j < input.size(); j++)
-    // {
-    //     cout << input[j][0] << ", " << input[j][1] << ", " << input[j][2] << ", " << input[j][3] << ", " << input[j][4] << ", " << input[j][5] << ", " << input[j][6] << ", " << input[j][7] << endl;
-    // }
-
-    
-
-	double fps = 500, fc = 4.1;
-	
-
-	const int N = input.size();
-	//	
-	//for (int i = 0; i < 1000; i++)
-	//{
-	//	float x;
-	//	ifile >> x;
-	//	input.push_back(x);
-	//}
-
-	//Frequency bands is a vector of values - Lower Frequency Band and Higher Frequency Band
-
-	//First value is lower cutoff and second value is higher cutoff
-	double FrequencyBands[2] = { 0.000015,fc/(fps/2) };//these values are as a ratio of f/fs, where fs is sampling rate, and f is cutoff frequency
-	//and therefore should lie in the range [0 1]
-	//Filter Order
-
-	int FiltOrd = 3;
-
-	//Pixel Time Series
-	/*int PixelTimeSeries[N];
-	int outputSeries[N];
-	*/
-	//Create the variables for the numerator and denominator coefficients
-	vector<double> a;
-	vector<double> b;
-	//Pass Numerator Coefficients and Denominator Coefficients arrays into function, will return the same
-
-	vector<double> x(N);
-	vector<double> y(N);
-
-	for (int i = 0; i < x.size(); i++)
-	{
-		 x[i] = input[i][4];
-	}
-	
-
-	//is A in matlab function and the numbers are correct
-	a = ComputeDenCoeffs(FiltOrd, FrequencyBands[0], FrequencyBands[1]);
-	for (int k = 0; k<a.size(); k++)
-	{
-		printf("DenC is: %lf\n", a[k]);
-	}
-
-	b = ComputeNumCoeffs(FiltOrd, FrequencyBands[0], FrequencyBands[1], a);
-	for (int k = 0; k<b.size(); k++)
-	{
-		printf("NumC is: %lf\n", b[k]);
-	}
-
-	y = filter(x,b,a);
-
-	ofstream ofile;
-	ofile.open("Filtered3.txt");
-	for (int i = 0; i < N; i++)
-	{
-		ofile << y[i] << " " << x[i] << endl;
-	}
-	ofile.close();
-
-	return 0;
-}
-
-vector<double> ComputeDenCoeffs(int FilterOrder, double Lcutoff, double Ucutoff)
+vector<double> ButterworthFilter::ComputeDenCoeffs(int FilterOrder, double Lcutoff, double Ucutoff)
 {
 	int k;            // loop variables
 	double theta;     // PI * (Ucutoff - Lcutoff) / 2.0
@@ -169,7 +54,7 @@ vector<double> ComputeDenCoeffs(int FilterOrder, double Lcutoff, double Ucutoff)
 	return DenomCoeffs;
 }
 
-vector<double> TrinomialMultiply(int FilterOrder, vector<double> b, vector<double> c)
+vector<double> ButterworthFilter::TrinomialMultiply(int FilterOrder, vector<double> b, vector<double> c)
 {
 	int i, j;
 	vector<double> RetVal(4 * FilterOrder);
@@ -201,7 +86,7 @@ vector<double> TrinomialMultiply(int FilterOrder, vector<double> b, vector<doubl
 	return RetVal;
 }
 
-vector<double> ComputeNumCoeffs(int FilterOrder, double Lcutoff, double Ucutoff, vector<double> DenC)
+vector<double> ButterworthFilter::ComputeNumCoeffs(int FilterOrder, double Lcutoff, double Ucutoff, vector<double> DenC)
 {
 	vector<double> TCoeffs;
 	vector<double> NumCoeffs(2 * FilterOrder + 1);
@@ -255,7 +140,7 @@ vector<double> ComputeNumCoeffs(int FilterOrder, double Lcutoff, double Ucutoff,
 	return NumCoeffs;
 }
 
-vector<double> ComputeLP(int FilterOrder)
+vector<double> ButterworthFilter::ComputeLP(int FilterOrder)
 {
 	vector<double> NumCoeffs(FilterOrder + 1);
 	int m;
@@ -275,7 +160,7 @@ vector<double> ComputeLP(int FilterOrder)
 	return NumCoeffs;
 }
 
-vector<double> ComputeHP(int FilterOrder)
+vector<double> ButterworthFilter::ComputeHP(int FilterOrder)
 {
 	vector<double> NumCoeffs;
 	int i;
@@ -288,7 +173,7 @@ vector<double> ComputeHP(int FilterOrder)
 	return NumCoeffs;
 }
 
-vector<double> filter(vector<double>x, vector<double> coeff_b, vector<double> coeff_a)
+vector<double> ButterworthFilter::filter(deque<double>x, vector<double> coeff_b, vector<double> coeff_a)
 {
 	int len_x = x.size();
 	int len_b = coeff_b.size();
@@ -322,6 +207,123 @@ vector<double> filter(vector<double>x, vector<double> coeff_b, vector<double> co
 	}
 
 	return filter_x;
+}
+
+
+vector<double> ButterworthFilter::filter(vector<double>x, vector<double> coeff_b, vector<double> coeff_a)
+{
+	return {};
+}
+
+int main()
+{
+	ifstream ifile;
+	ifile.open("/home/mads/git/project_in_advanced_robotics/wrench.csv");
+	vector<vector<double>> input, output;
+
+
+    std::string line, value;
+    int i = 0;
+    vector<double> vec_line;
+    while(std::getline(ifile, line, '\n'))
+    {
+        for (int j = 0; j < 7; j++)
+        {
+            vec_line.push_back(stod(line.substr(0,line.find(","))));
+            line.erase(0,(int)line.find(",")+1);
+        }
+        vec_line.push_back(stod(line));
+        input.push_back(vec_line);
+        vec_line.clear();
+    }
+
+    // for (int j = 0; j < input.size(); j++)
+    // {
+    //     cout << input[j][0] << ", " << input[j][1] << ", " << input[j][2] << ", " << input[j][3] << ", " << input[j][4] << ", " << input[j][5] << ", " << input[j][6] << ", " << input[j][7] << endl;
+    // }
+
+    
+
+	double fps = 500, fc = 2;
+	
+
+	const int N = input.size();
+	std::cout << N << std::endl;
+	//	
+	//for (int i = 0; i < 1000; i++)
+	//{
+	//	float x;
+	//	ifile >> x;
+	//	input.push_back(x);
+	//}
+
+	//Frequency bands is a vector of values - Lower Frequency Band and Higher Frequency Band
+
+	//First value is lower cutoff and second value is higher cutoff
+	double FrequencyBands[2] = { 0.000015,fc/(fps/2) };//these values are as a ratio of f/fs, where fs is sampling rate, and f is cutoff frequency
+	//and therefore should lie in the range [0 1]
+	//Filter Order
+
+	int FiltOrd = 3;
+
+	//Pixel Time Series
+	/*int PixelTimeSeries[N];
+	int outputSeries[N];
+	*/
+	//Create the variables for the numerator and denominator coefficients
+	vector<double> a;
+	vector<double> b;
+	//Pass Numerator Coefficients and Denominator Coefficients arrays into function, will return the same
+
+	deque<double> x(N);
+	vector<double> y(N);
+
+	for (int i = 0; i < N; i++)
+	{
+		x[i] = input[i][4];
+	}
+	
+	ButterworthFilter filter;
+
+	//is A in matlab function and the numbers are correct
+	a = filter.ComputeDenCoeffs(FiltOrd, FrequencyBands[0], FrequencyBands[1]);
+	for (int k = 0; k<a.size(); k++)
+	{
+		printf("DenC is: %lf\n", a[k]);
+	}
+
+	b = filter.ComputeNumCoeffs(FiltOrd, FrequencyBands[0], FrequencyBands[1], a);
+	for (int k = 0; k<b.size(); k++)
+	{
+		printf("NumC is: %lf\n", b[k]);
+	}
+
+
+	std::deque<double> in;
+	for (unsigned int i = 0; i < N; ++i)
+	{
+		if (i >= 1000)
+		{
+			in.pop_front();
+			//std::cout << i << std::endl;
+		}
+		in.push_back(x[i]);
+		//std::cout << in.back() << std::endl;
+		std::vector<double> output = filter.filter(in,b,a);
+		//std::cout << output.back() << std::endl;
+		y[i] = output.back();
+	}
+	std::cout << "done calculating" << std::endl;
+	//y = filter.filter(x, b, a);
+	ofstream ofile;
+	ofile.open("/home/mads/git/project_in_advanced_robotics/Filtered3.txt");
+	for (int i = 0; i < N; i++)
+	{
+		ofile << y[i] << " " << x[i] << endl;
+	}
+	ofile.close();
+
+	return 0;
 }
 
 

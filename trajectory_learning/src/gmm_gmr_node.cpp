@@ -5,6 +5,11 @@
 #include <cartesian_control_msgs/FollowCartesianTrajectoryAction.h>
 #include <actionlib/client/simple_action_client.h>
 #include <tf2/LinearMath/Quaternion.h>
+#include <std_srvs/Trigger.h>
+
+// Implemented controller
+#include <geometry_msgs/WrenchStamped.h>
+#include <hybrid_force_pos_controller/targetTraj.h>
 
 // Make a function to switch on the correct controllers - maybe this is needed
 
@@ -13,17 +18,18 @@ int main(int argc, char* argv[])
 
   // This must be called before anything else ROS-related
   ros::init(argc, argv, "gmm");
+  ros::NodeHandle nh;
 
   // Align the demonstrated trajectories
-  trajectory_learning::GMMAndGMR gmm_gmr("/home/mads/git/project_in_advanced_robotics/trajectory_learning/demonstrations");
+  trajectory_learning::GMMAndGMR gmm_gmr("/home/marcus/project/project_in_advanced_robotics/trajectory_learning/demonstrations");
 
   gmm_gmr.gmm_learn();
   std::vector<unsigned int > in = {7};
   std::vector<unsigned int > out = {0,1,2,3,4,5,6};
   std::vector<double> input_data;
 
-  double step = 0.0001; //This can be adjusted to what is needed.
-  for (double i = 0.0; i < gmm_gmr.get_end_time(); i = i +step)
+  double step = 0.002; //This can be adjusted to what is needed.
+  for (double i = step; i < gmm_gmr.get_end_time(); i = i +step)
   {
     input_data.push_back(i);
   }
@@ -32,11 +38,19 @@ int main(int argc, char* argv[])
 
   
   // First point in the trajectory cannot be 0.0 time, it should be a time different from zero.
-  cartesian_control_msgs::FollowCartesianTrajectoryGoal trajectory_goal;
-  cartesian_control_msgs::FollowCartesianTrajectoryGoal first_goal;
+  cartesian_control_msgs::CartesianTrajectory traj;
+  cartesian_control_msgs::CartesianTrajectory first_goal;
   double cur_time = 0.01;
   std::ofstream myfile;
-  //myfile.open ("/home/mads/git/project_in_advanced_robotics/trajectory_learning/test.csv");
+  std::vector<geometry_msgs::WrenchStamped> wrench;
+  geometry_msgs::WrenchStamped cur_wrench;
+  cur_wrench.wrench.force.x = 0.0;
+  cur_wrench.wrench.force.y = 0.0;
+  cur_wrench.wrench.force.z = -12.0; // Seems to be working
+  cur_wrench.wrench.torque.x = 0.0;
+  cur_wrench.wrench.torque.y = 0.0;
+  cur_wrench.wrench.torque.z = 0.0;
+  myfile.open ("/home/mads/git/project_in_advanced_robotics/trajectory_learning/traj.csv");
   std::cout << target.size() << " and the other size " << input_data.size() << std::endl;
   for (unsigned int i = 0; i < target.size(); ++i)
   {
@@ -50,32 +64,36 @@ int main(int argc, char* argv[])
     cur_point.pose.orientation.x = target[i][4];
     cur_point.pose.orientation.y = target[i][5];
     cur_point.pose.orientation.z = target[i][6];
-    trajectory_goal.trajectory.points.push_back(cur_point);
+    traj.points.push_back(cur_point);
+    wrench.push_back(cur_wrench);
     if (i == 0)
     {
-      cur_point.time_from_start = ros::Duration(10.0);
-      first_goal.trajectory.points.push_back(cur_point);
+      cur_point.time_from_start = ros::Duration(5.0);
+      first_goal.points.push_back(cur_point);
+      std::cout << target[i][0] << " " << target[i][1] << " " << target[i][2] << " " << std::endl;
+      std::cout << target[i][3] << " " << target[i][4] << " " << target[i][5] << " " << target[i][6] << std::endl;
     }
-    //myfile << cur_point.pose.position.x << "," << cur_point.pose.position.y << "," << cur_point.pose.position.z << "," << cur_point.pose.orientation.w  << "," << cur_point.pose.orientation.x << "," << cur_point.pose.orientation.y << "," << cur_point.pose.orientation.z << "\n";
+    myfile << cur_point.pose.position.x << "," << cur_point.pose.position.y << "," << cur_point.pose.position.z << "," << cur_point.pose.orientation.w  << "," << cur_point.pose.orientation.x << "," << cur_point.pose.orientation.y << "," << cur_point.pose.orientation.z << "\n";
   }
 
-  //myfile.close();
+  myfile.close();
 
-  gmm_gmr.write_data_to_file("/home/mads/git/project_in_advanced_robotics/trajectory_learning/gmm_model/means.txt", 
-                             "/home/mads/git/project_in_advanced_robotics/trajectory_learning/gmm_model/cov.txt",
-                             "/home/mads/git/project_in_advanced_robotics/trajectory_learning/gmm_model/priors.txt");
+  gmm_gmr.write_data_to_file("/home/marcus/project/project_in_advanced_robotics/trajectory_learning/gmm_model/means.txt", 
+                             "/home/marcus/project/project_in_advanced_robotics/trajectory_learning/gmm_model/cov.txt",
+                             "/home/marcus/project/project_in_advanced_robotics/trajectory_learning/gmm_model/priors.txt");
 
-  // Move robot to initial trajectory point
-  actionlib::SimpleActionClient<cartesian_control_msgs::FollowCartesianTrajectoryAction> publish_action("/pose_based_cartesian_traj_controller/follow_cartesian_trajectory", true);
-  publish_action.waitForServer(ros::Duration(10));
-  publish_action.sendGoal(first_goal);
-  publish_action.waitForResult(ros::Duration(15));
-  if (publish_action.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
-    std::cout << "Robot move succesfully to the first point executed succesfully " << std::endl;
+  ros::ServiceClient srv_client = nh.serviceClient<hybrid_force_pos_controller::targetTraj>("target_hybrid");
+  ros::ServiceClient srv_zero_ft = nh.serviceClient<std_srvs::Trigger>("/ur_hardware_interface/zero_ftsensor");
+  
+  hybrid_force_pos_controller::targetTraj srv;
+  std_srvs::Trigger std_trigger;
 
-  // Execute trajectory
-  publish_action.sendGoal(trajectory_goal);
-  publish_action.waitForResult(ros::Duration(15));
-  if (publish_action.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
-    std::cout << "Trajectory executed succesfully" << std::endl;
+  // When starting the program it will zero the ft sensor
+  //srv_zero_ft.call(std_trigger);
+
+  srv.request.traj = traj;
+  srv.request.wrenches = wrench;
+  srv_client.call(srv);
+
+  std::cout << "service has been called" << std::endl;
 }
