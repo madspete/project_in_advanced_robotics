@@ -194,6 +194,11 @@ void GMMAndGMR::gmr_calculation_fast_gmm(std::vector<Vector>& target, std::vecto
   }
 }
 
+double GMMAndGMR::get_end_time()
+{
+  return end_time_;
+}
+
 void GMMAndGMR::prepare_gmr_data(std::vector<unsigned int> in, std::vector<unsigned int> out,
                                  arma::mat& input_means, arma::mat& output_means,
                                  std::vector<arma::mat>& sigma_out, std::vector<arma::mat>& sigma_in, 
@@ -414,6 +419,8 @@ void GMMAndGMR::align_trajectories()
 
     std::vector<std::vector<double>> longest_traj = demonstrated_trajectories.get_trajectory(longest_traj_idx);
     double step = 10.0 / longest_traj.size();
+    // This is used to store the correct timing as the data points are collected with this frequenzy
+    double ur_step = 0.002;
 
     for (unsigned int i = 0; i < demonstrated_trajectories.size(); ++i)
     {
@@ -452,11 +459,13 @@ void GMMAndGMR::align_trajectories()
       elems = longest_traj[i];
       elems.push_back(time);
       cur_timed_traj.push_back(elems);
-      time += step;
+      time += ur_step;
     }
+    end_time_ = time;
     aligned_demonstrated_trajectories_.add_trajectory(cur_timed_traj);
     for (unsigned int i = 0; i < traj.size(); ++i)
     {
+      time = 0.0;
       std::vector<std::vector<double>> cur_timed_traj;
       for (double j = 0.0; j < 10; j = j + step)
       {
@@ -470,8 +479,8 @@ void GMMAndGMR::align_trajectories()
         elems.push_back(desired.q.x());
         elems.push_back(desired.q.y());
         elems.push_back(desired.q.z());
-        elems.push_back(j);
-        std::cout << j << std::endl;
+        elems.push_back(time);
+        time += ur_step;
         cur_timed_traj.push_back(elems);
       }
       aligned_demonstrated_trajectories_.add_trajectory(cur_timed_traj);

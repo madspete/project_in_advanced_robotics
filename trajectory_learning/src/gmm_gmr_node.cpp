@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
   std::vector<double> input_data;
 
   double step = 0.0001; //This can be adjusted to what is needed.
-  for (double i = 0.0; i < 10; i = i +step)
+  for (double i = 0.0; i < gmm_gmr.get_end_time(); i = i +step)
   {
     input_data.push_back(i);
   }
@@ -36,11 +36,12 @@ int main(int argc, char* argv[])
   cartesian_control_msgs::FollowCartesianTrajectoryGoal first_goal;
   double cur_time = 0.01;
   std::ofstream myfile;
-  myfile.open ("/home/mads/git/project_in_advanced_robotics/trajectory_learning/test.csv");
+  //myfile.open ("/home/mads/git/project_in_advanced_robotics/trajectory_learning/test.csv");
+  std::cout << target.size() << " and the other size " << input_data.size() << std::endl;
   for (unsigned int i = 0; i < target.size(); ++i)
   {
     cartesian_control_msgs::CartesianTrajectoryPoint cur_point;
-    ros::Duration dur(cur_time);
+    ros::Duration dur(input_data[i]);
     cur_point.time_from_start = dur;
     cur_point.pose.position.x = target[i][0];
     cur_point.pose.position.y = target[i][1];
@@ -49,18 +50,16 @@ int main(int argc, char* argv[])
     cur_point.pose.orientation.x = target[i][4];
     cur_point.pose.orientation.y = target[i][5];
     cur_point.pose.orientation.z = target[i][6];
-    
     trajectory_goal.trajectory.points.push_back(cur_point);
-    cur_time = cur_time + step;
     if (i == 0)
     {
       cur_point.time_from_start = ros::Duration(10.0);
       first_goal.trajectory.points.push_back(cur_point);
     }
-    myfile << cur_point.pose.position.x << "," << cur_point.pose.position.y << "," << cur_point.pose.position.z << "," << cur_point.pose.orientation.w  << "," << cur_point.pose.orientation.x << "," << cur_point.pose.orientation.y << "," << cur_point.pose.orientation.z << "\n";
+    //myfile << cur_point.pose.position.x << "," << cur_point.pose.position.y << "," << cur_point.pose.position.z << "," << cur_point.pose.orientation.w  << "," << cur_point.pose.orientation.x << "," << cur_point.pose.orientation.y << "," << cur_point.pose.orientation.z << "\n";
   }
 
-  myfile.close();
+  //myfile.close();
 
   gmm_gmr.write_data_to_file("/home/mads/git/project_in_advanced_robotics/trajectory_learning/gmm_model/means.txt", 
                              "/home/mads/git/project_in_advanced_robotics/trajectory_learning/gmm_model/cov.txt",

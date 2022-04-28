@@ -41,6 +41,9 @@ public:
 
   void write_data_to_file(std::string filepath_means, std::string filepath_cov, std::string filepath_priors);
 
+  // Only end time is relevant as we always will use 0 as the start index
+  double get_end_time();
+
 private:
   void get_trajectory_filenames();
   
@@ -60,6 +63,7 @@ private:
   std::string model_path_;
   arma::gmm_full gmm_model_;
   std::unique_ptr<Gaussians> gmr_model_;
+  double end_time_;
 
 };
 }
