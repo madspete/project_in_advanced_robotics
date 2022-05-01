@@ -233,7 +233,7 @@ for i = 1:size(cloud.Location,1)
     curPoint = cloud.Location(i,:); % Get the ith point cloud point
     % Compute the vector from the current point to the center of the plane
     vecToLine = curPoint-origoPlaneCenterVec;
-    % Compute the perpendicular distance from teh current point to the
+    % Compute the perpendicular distance from the current point to the
     % plane normal vector
     dist = norm(cross(vecToLine,perpVec))/norm(perpVec);
     if abs(dist) <= R % Point is on circle perimiter or within 
