@@ -11,7 +11,7 @@ clc
 % --------- CONTROL OF TRAJECTORY TYPE ----------
 % Control if a radomly generated trajectory is used, or if a recorded
 % trajectory is loaded
-useTestTrajectory = true;
+useTestTrajectory = false;
 
 % ---------- FIGURE DISPLAY CONTROL ----------
 % Display point cloud
@@ -19,14 +19,15 @@ displayPointCloud = false;
 % Display discretized tool points
 showToolPoints = false;
 % Display trajectory
-showTrajectory = false;
+showTrajectory = true;
 % Create video of toolpath on trajectory 
+% NOT RECOMMENDED ON ACTUAL PATH
 makeTrajectoryVideo = false;
 fileName = 'TrajectoryMovement.avi';
 % Display estimated contact area and force graph
-showEstimatedAreaAndContact = true;
+showEstimatedAreaAndContact = false;
 % Display contact area and points in a specific trajectory point
-trajectoryPointDisplay = 7;
+trajectoryPointDisplay = 12;
 displaySingleToolContactArea = true;
 
 %% LOADING AND PREPROCSEEING OF POINT CLOUD   
@@ -243,8 +244,8 @@ if useTestTrajectory == false
     % Step 2:
     % Define the transformation between the robot TCP frame and the frame
     % of the tool. This is just an extension of the tool height along Z
-    TTCPTool = [1 0 0 1;
-                0 1 0 1;
+    TTCPTool = [1 0 0 0;
+                0 1 0 0;
                 0 0 1 toolHeight;
                 0 0 0 1];
     % Apply transformation from robot frame to tool frame by multiplying
@@ -262,24 +263,22 @@ if useTestTrajectory == false
     % Step 3:
     % Define the translation between the robot base frame and the object 
     % frame.
-    robotObjectTranslation = [1 1 1];
+    robotObjectTranslation = [791 -14 0];
     % Define the rotation between the robot base frame and the object frame
-    robotObjectRotation = [1 0 0;
-                           0 1 0;
-                           0 0 1];
+    % It is rotated 90 degrees clockwise around the z robot axis
+    ang = 22.26-90;
+    robotObjectRotation = [cosd(ang) -sind(ang) 0;
+                           sind(ang) cosd(ang)  0;
+                           0     0      1];
     % Define transformation matrix from robot frame to object frame
     TObjectRobot = [robotObjectRotation robotObjectTranslation';
                     0 0 0 1];
-    % Apply transformation to object points
-    % Get the current points
+    % Get the point cloud points
     points = cloud.Location;
-    % Allocate marix for transformed points
-    transformedPoints = zeros(size(points,1),3);
-    for i = 1:size(transformedPoints,1)
-        transformedPoint = [points(i,:) 1] * TObjectRobot;
-        transformedPoints(i,:) = transformedPoint(1:3);
-    end
-    cloud = pointCloud(transformedPoints);
+    % Apply transformation to point cloud points. This is defined for 
+    % column-vectors, hence the transpose of curToolLocation
+    transformedPoints = TObjectRobot * [points ones(size(points,1),1)]';
+    transformedCloud = pointCloud(transformedPoints(1:3,:)');
 
     % Step 4:
     % Display data
@@ -297,7 +296,7 @@ if useTestTrajectory == false
         plot3(toolTrajectory(:,1),toolTrajectory(:,2),toolTrajectory(:,3),'ob')
         % Plot origo of the object frame in the robot frame
         plot3(robotObjectTranslation(1),robotObjectTranslation(2),robotObjectTranslation(3),'or')
-        scatter3(cloud.Location(:,1),cloud.Location(:,2),cloud.Location(:,3),5,cloud.Location(:,3))
+        scatter3(transformedCloud.Location(:,1),transformedCloud.Location(:,2),transformedCloud.Location(:,3),5,transformedCloud.Location(:,3))
         hold off
         title('TCP and tool trajectory, as well as point cloud in robot base frame')
         xlabel('X [mm]')
@@ -312,48 +311,41 @@ end
 %% MOVING THE TOOL ALONG THE TRAJECTORY
 
 % POTENTIAL IMPROVEMENTS:
-% Maybe redefine the transformation applied when using the test trajectory
-% so the procedure is the same, no matter if the test or real tool. If i do
-% this, then in theory i can also skip fitting a plane, since the
-% transformation is known.
-% trajectory is used
 % Plot the frame for every trajectory point
 % Plot the plane when using the tool trajectory
 
-% ---------- PROCEDURE FOR TEST TRAJECTORY ----------
+% ---------- IF THE TEST TRAJECTORY IS CHOSEN, THE FOLLOWING STEPS ARE PERFORMED FIRST ----------
 % Step 1: Iterate through all test trajectory points
 % Step 2: For the current point, fit a plane to all points within an xy 
 %         radius constraint to the current trajectory-point.
 % Step 3: Define two vectors from the center of the plane, 
 %         to the middle of one of the two xy edges of the plane, and use 
 %         the cross-product to get the plane normal in positive z direction.
-% Step 4: Transform tool points to the frame of the current trajectory 
-%         point. The tool points are defined in the base frame.
-%         The frame of the current trajectory point has origo in the center
-%         of the plane with the z-axis being the plane normal and the x and
-%         y axis being the vectors of the used to construct the plane
-%         normal. The transformation between these frames is just the 
-%         vector between origo of the frames. The rotation matrix between 
-%         the frames can be constructed using prerequisite slides from 
-%         robotics 1, lecture 1.
-%         Tool points are first rotated and then translated with defined 
-%         polishing depth and finally saved before moving onto the next 
-%         trajectory point.
-% ---------- PROCEDURE FOR REAL TOOL TRAJECTORY ----------
+%         Save these vectors for later transformation
+
+% ---------- TRANSFORMATION PROCEDURE FOR TOOL POINTS TO TRAJECTORY ----------
 % Step 1: Iterate through all tool trajectory points
-% Step 2: Transform tool points using the transformations derived in the
-%         previous section
+% Step 2: Transform test/tool points using the derived transformations
 
 % Constants
 % Depth at which the tool is below the surface of the object
 polishingDepth = 1; % [mm]
 
+% Define trajectory size, depending on if the test or real tool trajectory
+% is used
+if useTestTrajectory == true
+    trajectorySize = size(testTrajectory,1);
+else
+    cloud = pointCloud(transformedCloud.Location);
+    trajectorySize = size(toolTrajectory,1);
+end
+
 if useTestTrajectory == true
     % ---------- USING TEST TRAJECTORY ----------
-    % Initialize 3D storage matrix for tool points. This stores all tool points
-    % at each point on the trajectory
-    toolLocations = zeros(size(toolPoints,1),size(toolPoints,2),size(testTrajectory,1));
     
+    % Allocate matrix for storing the axis of each trajectory point
+    testTrajectoryAxis = zeros(3,3,trajectorySize);
+
     % Define the number of points the fitted plane is discretized with along
     % each axis
     planeDiscretizationStep = 50;
@@ -388,7 +380,7 @@ if useTestTrajectory == true
         planeYPoints = pointsInRange(:,2);
         planeZPoints = pointsInRange(:,3);
         AM = [planeXPoints planeYPoints ones(size(planeZPoints,1),1)];
-        BM = [planeZPoints];
+        BM = planeZPoints;
         planeCoeffs = AM\BM;
     
         % Step 3:
@@ -429,50 +421,39 @@ if useTestTrajectory == true
         normPlaneYVec = planeYVec/norm(planeYVec);
         perpVec = cross(planeXVec,planeYVec);
         normVec = perpVec/norm(perpVec);
-    
-        % Step 4:
-        % Transformning tool points, which are defined in origo, to the frame
-        % of the current trajectory point
-        % The plane vectors can now be used to construct the rotation matrix
-        % Theory is from prerequisites slides in robotics 1, lecture 1 
-        % Important that dot product components per definition must be equal 
-        % length, therefore norms are used! Rotation and translation could have
-        % been combined, in which vectors would have to have a 1 element added 
-        % to them since the matrix is 4*4
-        rotMatrix = [normPlaneXVec', normPlaneYVec', normVec'];
-        % Now, get a copy of the tool points, which will be transformed to the 
-        % trajectory point frame.
-        curToolLocation = [toolPoints(:,1) toolPoints(:,2) toolPoints(:,3)-polishingDepth];
-        % Rotate the tool points
-        curToolLocation = (rotMatrix * curToolLocation')';
-        % Translate the tool points by adding trajectory-point. 
-        curToolLocation = curToolLocation + curPoint;
-        % Save the tool points to a 3D matrix for potential later use
-        toolLocations(:,:,i) = curToolLocation;    
+        % Save the vectors
+        testTrajectoryAxis(:,:,i) = [normPlaneXVec;
+                                     normPlaneYVec;
+                                     normVec];
     end
-else
-    % ---------- USING REAL TOOL TRAJECTORY ----------
-    % Initialize 3D storage matrix for tool points. This stores all tool points
-    % at each point on the trajectory
-    toolLocations = zeros(size(toolPoints,1),size(toolPoints,2),size(toolTrajectory,1));
+end
 
-    % Step 1:
-    % Iterate through all trajectory points
-    for i = 1:size(toolTrajectory,1)
-        % Step 2:
-        % Constructing transformation matrix.
+% Initialize 3D storage matrix for tool points. This stores all tool points
+% at each point on the trajectory
+toolLocations = zeros(size(toolPoints,1),size(toolPoints,2),trajectorySize);
+
+% Step 1:
+% Iterate through all trajectory points
+for i = 1:trajectorySize
+    % Step 2:
+    % Constructing transformation matrix. Depends on the chosen trajectory
+    if useTestTrajectory == true
+        currentTrajectoryPoint = testTrajectory(i,:);
+        curTransform = [testTrajectoryAxis(1,:,i)', testTrajectoryAxis(2,:,i)', testTrajectoryAxis(3,:,i)', currentTrajectoryPoint';
+                        0 0 0 1];
+    else
         curTransform = [toolTrajectory(i,4:6) toolTrajectory(i,1);
-                       toolTrajectory(i,7:9) toolTrajectory(i,2);
-                       toolTrajectory(i,10:12) toolTrajectory(i,3);
-                       0 0 0 1];
-        % Get a copy of the tool points to transform. Apply polishing depth
-        % transformation at the same time
-        curToolLocation = [toolPoints(:,1) toolPoints(:,2) toolPoints(:,3)-polishingDepth 1];
-        % Translate the tool points by adding trajectory-point. 
-        curToolLocation = curToolLocation * curTransform;
-        % Save the tool points to a 3D matrix for potential later use
-        toolLocations(:,:,i) = curToolLocation;
+                   toolTrajectory(i,7:9) toolTrajectory(i,2);
+                   toolTrajectory(i,10:12) toolTrajectory(i,3);
+                   0 0 0 1];
     end
+    % Get a copy of the tool points to transform. Apply polishing depth
+    % transformation at the same time
+    curToolLocation = [toolPoints(:,1) toolPoints(:,2) toolPoints(:,3)-polishingDepth ones(size(toolPoints,1),1)];
+    % Translate the tool points by adding trajectory-point. 
+    curToolLocation = curTransform * curToolLocation';
+    % Save the tool points to a 3D matrix for potential later use
+    toolLocations(:,:,i) = curToolLocation(1:3,:)';
 end
 
 % Create and save figures for illustration video
@@ -522,23 +503,25 @@ end
 
 %% ESTIMATING CONTACT AREA IN TRAJECTORY
 
+% I already know the transform, so i don't have to fit the plane
+% I still want to plot the plane though, for visualization purposes
+
 % Procedure:
 % 1. Iterate through trajectory points
 % 2. Fit plane to tool points in the current trajectory point
-% 3. Calculate plane normal. This is the z-axis of the trajectory frame
-% 4. Select all points from point cloud which satisfy the radius constraint 
+% 3. Select all points from point cloud which satisfy the radius constraint 
 %    of the tool, meaning the points that are closer or equal to the radius
 %    distance from the plane normal
-% 5. Calculate the unit area, which is the total area divided by the number
+% 4. Calculate the unit area, which is the total area divided by the number
 %    of points within the radius constraint
-% 6. Calculate the amount of points in contact, by transforming them to the
+% 5. Calculate the amount of points in contact, by transforming them to the
 %    frame of the current trajectory point and looking for pointZ >= 0
-% 7. Compute the percentage of points in range that are in contact with the
+% 6. Compute the percentage of points in range that are in contact with the
 %    tool, as well as the area that they cover. Multiply with a target
 %    pressure to get a force stimate in that trajectory point
-% 8. Plot estimated contact percentage, area and force as a function of
+% 7. Plot estimated contact percentage, area and force as a function of
 %    trajectory point
-% 9. Display figure with trajectory, plane, points in range and points in
+% 8. Display figure with trajectory, plane, points in range and points in
 %    contact
 
 % Desired pressure that the tool has maintain in each point on the 
@@ -550,14 +533,6 @@ desiredToolPressure = 718; % [Pa]
 
 % Area of the tool
 A = pi * R^2; % [mm^2] 
-
-% Define trajectory size, depending on if the test or real tool trajectory
-% is used
-if useTestTrajectory == true
-    trajectorySize = size(testTrajectory,1);
-else
-    trajectorySize = size(toolTrajectory,1);
-end
 
 % Matricies to store the points within the radius constraint and in contact
 pointsInRange = zeros(size(cloud.Location,1),3,trajectorySize);
@@ -580,7 +555,7 @@ estimationMatrix = zeros(trajectorySize,3);
 for i = 1:trajectorySize
 
     % Step 2:
-    % Fit plane to discretized tool points
+    % Fit plane to discretized tool points for plotting purposes
     % Get the tool points from the i'th trajectory point
     toolXVals = toolLocations(:,1,i);
     toolYVals = toolLocations(:,2,i);
@@ -590,9 +565,6 @@ for i = 1:trajectorySize
     SLE = [toolXVals toolYVals ones(size(toolZVals,1),1)];
     % Operator '\' means solve the system of linear equations for A\B (Ax=B)
     coeffs = SLE\toolZVals;
-    
-    % Step 3:
-    % Calculate plane normal
     % Find the min and max of the tool points
     toolXRange = [min(toolXVals) max(toolXVals)];
     toolYRange = [min(toolYVals) max(toolYVals)];
@@ -604,51 +576,54 @@ for i = 1:trajectorySize
                                                linspace(toolYRange(1),toolYRange(2),toolPlaneDiscretizationStep));
     plotToolPlaneZ = coeffs(1)*plotToolPlaneX + coeffs(2)*plotToolPlaneY + coeffs(3)*ones(size(plotToolPlaneX));
     discretizedToolPlanePoints(:,:,i) = [plotToolPlaneX(:) plotToolPlaneY(:) plotToolPlaneZ(:)];
-    % Find the center point of the plane
+    % Find the center point of the plane, and define it as a vector
     centerX = mean(toolXRange);
     centerY = mean(toolYRange);
     centerZ = mean(toolZRange);
-    % Using the cross-product of two vectors in the plane to find 
-    % the plane normal. They are both pointing to the middle
-    % of the x and y edges of the fitted plane.
-    % First, solving for the z-value in these points
-    centerXZVal = coeffs(1) * max(toolXRange) + coeffs(2) * centerY + coeffs(3);
-    centerYZVal = coeffs(1) * centerX + coeffs(2) * max(toolYRange) + coeffs(3);
-    % Vector from the center of the plane to the median points must be the
-    % vector from origo to the median points, minus the vector from origo to
-    % the center of the plane.
-    origoToolPlaneCenterVec = [centerX, centerY, centerZ];
-    origoToolPlaneXVec = [max(toolXRange),centerY,centerXZVal];
-    origoToolPlaneYVec = [centerX,max(toolYRange),centerYZVal];
-    toolPlaneXVec = origoToolPlaneXVec - origoToolPlaneCenterVec;
-    toolPlaneYVec = origoToolPlaneYVec - origoToolPlaneCenterVec;
-    normPlaneXVec = toolPlaneXVec / norm(toolPlaneXVec);
-    normPlaneYVec = toolPlaneYVec / norm(toolPlaneYVec);
-    toolPerpVec = cross(toolPlaneXVec,toolPlaneYVec);
-    % Normalizing the normal vector to the plane
-    toolNormVec = toolPerpVec/norm(toolPerpVec);
-    
-    % Step 4:
+    planeCenter = [centerX centerY centerZ];
+
+    % Step 3:
     % Select all points from the point cloud that satisfy the radius 
     % constraint
+    % Define the current transform used depending on chosen trajectory
+    if useTestTrajectory == true
+        curTransform = [testTrajectoryAxis(1,:,i)', testTrajectoryAxis(2,:,i)', testTrajectoryAxis(3,:,i)', planeCenter';
+                        0 0 0 1];
+    else
+        curTransform = [toolTrajectory(i,4:6) toolTrajectory(i,1);
+                   toolTrajectory(i,7:9) toolTrajectory(i,2);
+                   toolTrajectory(i,10:12) toolTrajectory(i,3);
+                   0 0 0 1];
+    end
+    % Iterate over all point cloud points
     inRadiusIndex = 1;
     for j = 1:size(cloud.Location,1)
         % Get the ith point cloud point
         curPoint = cloud.Location(j,:); 
         % Compute the vector from the current point to the center of the plane
-        vecToLine = curPoint - origoToolPlaneCenterVec;
+        vecCenterPoint = curPoint - planeCenter;
+
+        % Construct a plane normal vector, it is just a transform in z
+        zUnitTransform = [1 0 0 0;
+                          0 1 0 0;
+                          0 0 1 1;
+                          0 0 0 1];
+        planeZTransform = curTransform * zUnitTransform;
+        planeZ = planeZTransform(1:3,4);
+        planeNormal = planeZ' - planeCenter;
+
         % Compute the perpendicular distance from the current point to the
         % plane normal vector
         % See following link:
         % https://math.stackexchange.com/questions/1905533/find-perpendicular-distance-from-point-to-line-in-3d
-        dist = norm(cross(vecToLine,perpVec))/norm(perpVec);
+        dist = norm(cross(vecCenterPoint,planeNormal))/norm(planeNormal);
         if abs(dist) <= R % Point is on circle perimiter or within 
             pointsInRange(inRadiusIndex,:,i) = curPoint;
             inRadiusIndex = inRadiusIndex + 1;
         end
     end
     
-    % Step 5:
+    % Step 4:
     % Calculate the unit area each point, which is the amount each point
     % contributes to the area of the polishing tool.
     % Since pointsInRangeRange are stored in one big 3D matrix, ignore 
@@ -657,41 +632,19 @@ for i = 1:trajectorySize
     numberOfInRangePoints = size(pointsInRange(nonZeroCond,:,i),1);
     unitArea = A / numberOfInRangePoints; % [mm^2]
     
-    % PROBLEM HERE WITH TEST/TOOL TRAJECTORY
-    % Just apply the transformation to the point and evaluate z?
-    % Step 6:
+    % Step 5:
     % Find out how many points are in contact with the tool.
-    % Define rotation matrix (see previous section for desciption)
-    
-%     transform = [normPlaneXVec origoToolPlaneCenterVec(1)
-%                  normPlaneYVec origoToolPlaneCenterVec(2)
-%                  toolNormVec origoToolPlaneCenterVec(3)
-%                  0 0 0 1];
-%     curPointsInRange = [pointsInRange(:,:,i) ones(size(pointsInRange,1),1)];
-%     curPointsInRangeTransformed = curPointsInRange * transform;
-%     % Filter points
-%     positiveZs = curPointsInRangeTransformed(:,3) >= 0;
-%     pointsInContact = curPointsInRangeTransformed(positiveZs,1:3);
-    
-    rotMatrix = [normPlaneXVec; normPlaneYVec; toolNormVec;];
-    numberOfContactPoints = 0;
-    inContactIndex = 1;
-    for j = 1:numberOfInRangePoints
-        curInRangePoint = pointsInRange(j,:,i);
-        % First, translate current point by subtracting the vector to the 
-        % origo of the trajectory frame, which is the center of the plane
-        curInRangePoint = curInRangePoint - origoToolPlaneCenterVec;
-        % Then apply rotation of point to get it in the frame of the
-        % current trajectory point.
-        curInRangePoint = (rotMatrix * curInRangePoint')';
-        if curInRangePoint(3) >= 0
-            numberOfContactPoints = numberOfContactPoints + 1;
-            pointsInContact(inContactIndex,:,i) = pointsInRange(j,:,i);
-            inContactIndex = inContactIndex + 1;
-        end
-    end
+    curPointsInRange = [pointsInRange(1:numberOfInRangePoints,:,i) ones(numberOfInRangePoints,1)];
+    curPointsInRangeTransformed = inv(curTransform) * curPointsInRange';
+    % Remove unused dimension
+    curPointsInRangeTransformed = curPointsInRangeTransformed(1:3,:)';
+    % Filter points
+    positiveZs = curPointsInRangeTransformed(:,3) >= 0;
+    % Number of contact points is obtained by summing the logical structure
+    numberOfContactPoints = sum(positiveZs);
+    pointsInContact(1:numberOfContactPoints,:,i) = curPointsInRange(positiveZs,1:3);
 
-    % Step 7:
+    % Step 6:
     % Multiply the unit area with the amount of points in contact to get 
     % the estimated area
     estimationMatrix(i,1) = numberOfContactPoints / numberOfInRangePoints * 100;
@@ -699,7 +652,7 @@ for i = 1:trajectorySize
     estimationMatrix(i,3) = desiredToolPressure * estimationMatrix(i,2); % [N]
 end
 
-% Step 8:
+% Step 7:
 % Plot percentage of constact area, size of contact area and estimated 
 % force as a function of trajectory point
 if showEstimatedAreaAndContact == true
@@ -720,7 +673,7 @@ if showEstimatedAreaAndContact == true
     ylabel('Estimated contact force [N]')
 end
 
-% Step 9:
+% Step 8:
 % Display figure with trajectory, fitted tool plane, points within radius 
 % constraint and points in contact
 % Variable used to control which trajectory point contact area estiamation
@@ -745,7 +698,6 @@ if displaySingleToolContactArea == true
                  [toolPlaneDiscretizationStep toolPlaneDiscretizationStep]))
     % Since pointsInRange and pointsInContact are stored in one big matrix, 
     % ignore zeros to get the actual points
-
     nonZeroCondInRange = pointsInRange(:,1,trajectoryPointDisplay) > 0;
     nonZeroCondInContact = pointsInContact(:,1,trajectoryPointDisplay) > 0;
     scatter3(pointsInRange(nonZeroCondInRange,1,trajectoryPointDisplay), ...
