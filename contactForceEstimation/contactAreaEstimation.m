@@ -2,6 +2,12 @@ clear
 close all
 clc
 
+% Notes:
+% Tables weren't plane, which meant that a there was a slight rotation around
+% the x axis for the object frame that wasn't accounted for. This was 
+% visible when loading the trajectories, since a trajectory that was
+% supposed to be flat (non changeing in z) actually was.
+
 % Run the script while located in the directory where the script is located
 
 % REQUIREMENTS:
@@ -11,7 +17,7 @@ clc
 % --------- CONTROL OF TRAJECTORY TYPE ----------
 % Control if a radomly generated trajectory is used, or if a recorded
 % trajectory is loaded
-useTestTrajectory = false;
+useTestTrajectory = true;
 
 % ---------- FIGURE DISPLAY CONTROL ----------
 % Display point cloud
@@ -19,13 +25,12 @@ displayPointCloud = false;
 % Display discretized tool points
 showToolPoints = false;
 % Display trajectory
-showTrajectory = true;
-% Create video of toolpath on trajectory 
-% NOT RECOMMENDED ON ACTUAL PATH
+showTrajectory = false;
+% Create video of toolpath on trajectory
 makeTrajectoryVideo = false;
 fileName = 'TrajectoryMovement.avi';
 % Display estimated contact area and force graph
-showEstimatedAreaAndContact = false;
+showEstimatedAreaAndContact = true;
 % Display contact area and points in a specific trajectory point
 trajectoryPointDisplay = 12;
 displaySingleToolContactArea = true;
@@ -218,8 +223,13 @@ end
 if useTestTrajectory == false
 
     % Constants
-    % Tool height
-    toolHeight = 45; % [mm]
+    % Height of the tool. The three mm is from the height of the cardboard
+    toolHeight = 45 + 3; % [mm]
+    % Z-difference between robot base frame and TCP when the tool is
+    % touching the table
+    robotTCPZdiff = 16; % [mm]
+    % Z-difference from table surface to the robot base frame
+    zDiff = robotTCPZdiff - toolHeight;
 
     % Step 1:
     % Loading of the recorded trajectory. Transformations in the recorded
@@ -263,7 +273,7 @@ if useTestTrajectory == false
     % Step 3:
     % Define the translation between the robot base frame and the object 
     % frame.
-    robotObjectTranslation = [791 -14 0];
+    robotObjectTranslation = [341 -108.8 zDiff];
     % Define the rotation between the robot base frame and the object frame
     % It is rotated 90 degrees clockwise around the z robot axis
     ang = 22.26-90;
@@ -289,7 +299,7 @@ if useTestTrajectory == false
         figure(4)
         hold on
         % Change the view of the 3D figure. This is around the x-axis
-        view(-70,25);
+        view(-45,35);
         % Plotting TCP trajectory
         plot3(TCPTrajectoryCopy(:,1),TCPTrajectoryCopy(:,2),TCPTrajectoryCopy(:,3),'og')
         % Plotting tool trajectory
@@ -320,7 +330,8 @@ end
 %         radius constraint to the current trajectory-point.
 % Step 3: Define two vectors from the center of the plane, 
 %         to the middle of one of the two xy edges of the plane, and use 
-%         the cross-product to get the plane normal in positive z direction.
+%         the cross-product to get the plane normal pointing in through the
+%         object, just like the real tool.
 %         Save these vectors for later transformation
 
 % ---------- TRANSFORMATION PROCEDURE FOR TOOL POINTS TO TRAJECTORY ----------
@@ -328,16 +339,18 @@ end
 % Step 2: Transform test/tool points using the derived transformations
 
 % Constants
-% Depth at which the tool is below the surface of the object
+% Depth at which the tool is below the surface of the object. Used for
+% simulating actual polishing
 polishingDepth = 1; % [mm]
 
 % Define trajectory size, depending on if the test or real tool trajectory
 % is used
 if useTestTrajectory == true
     trajectorySize = size(testTrajectory,1);
+    pc = cloud;
 else
-    cloud = pointCloud(transformedCloud.Location);
     trajectorySize = size(toolTrajectory,1);
+    pc = transformedCloud;
 end
 
 if useTestTrajectory == true
@@ -355,18 +368,18 @@ if useTestTrajectory == true
     
     % Step 1:
     % Iterate through the points in the trajectory
-    for i = 1:size(testTrajectory,1)
+    for i = 1:trajectorySize
         % Grab the current trajectory point
         curPoint = testTrajectory(i,:);
     
         % Step 2: 
         % Find all the points inside specified radius from the current point
         trajR = 10; % [mm]
-        condXU = cloud.Location(:,1) <= (curPoint(1)+trajR);
-        condXL = cloud.Location(:,1) >= (curPoint(1)-trajR);
-        condYU = cloud.Location(:,2) <= (curPoint(2)+trajR);
-        condYL = cloud.Location(:,2) >= (curPoint(2)-trajR);
-        pointsInRange = cloud.Location(condXU & condXL & condYU & condYL, :);
+        condXU = pc.Location(:,1) <= (curPoint(1)+trajR);
+        condXL = pc.Location(:,1) >= (curPoint(1)-trajR);
+        condYU = pc.Location(:,2) <= (curPoint(2)+trajR);
+        condYL = pc.Location(:,2) >= (curPoint(2)-trajR);
+        pointsInRange = pc.Location(condXU & condXL & condYU & condYL, :);
         % Fit a plane to those points.
         % Solving Ax = B, where A is the pointInRange*3 matrix with the
         % first two columns being the x and y points found and the third being
@@ -419,7 +432,7 @@ if useTestTrajectory == true
         % vector using the cross-product and normalizing that
         normPlaneXVec = planeXVec/norm(planeXVec);
         normPlaneYVec = planeYVec/norm(planeYVec);
-        perpVec = cross(planeXVec,planeYVec);
+        perpVec = cross(planeYVec,planeXVec);
         normVec = perpVec/norm(perpVec);
         % Save the vectors
         testTrajectoryAxis(:,:,i) = [normPlaneXVec;
@@ -439,27 +452,48 @@ for i = 1:trajectorySize
     % Constructing transformation matrix. Depends on the chosen trajectory
     if useTestTrajectory == true
         currentTrajectoryPoint = testTrajectory(i,:);
-        curTransform = [testTrajectoryAxis(1,:,i)', testTrajectoryAxis(2,:,i)', testTrajectoryAxis(3,:,i)', currentTrajectoryPoint';
+        toolTransform = [testTrajectoryAxis(1,:,i)', testTrajectoryAxis(2,:,i)', testTrajectoryAxis(3,:,i)', currentTrajectoryPoint';
                         0 0 0 1];
     else
-        curTransform = [toolTrajectory(i,4:6) toolTrajectory(i,1);
+        toolTransform = [toolTrajectory(i,4:6) toolTrajectory(i,1);
                    toolTrajectory(i,7:9) toolTrajectory(i,2);
                    toolTrajectory(i,10:12) toolTrajectory(i,3);
                    0 0 0 1];
     end
-    % Get a copy of the tool points to transform. Apply polishing depth
-    % transformation at the same time
-    curToolLocation = [toolPoints(:,1) toolPoints(:,2) toolPoints(:,3)-polishingDepth ones(size(toolPoints,1),1)];
-    % Translate the tool points by adding trajectory-point. 
-    curToolLocation = curTransform * curToolLocation';
-    % Save the tool points to a 3D matrix for potential later use
-    toolLocations(:,:,i) = curToolLocation(1:3,:)';
+    % Get a copy of the tool points to transform.
+    curToolLocation = [toolPoints(:,1) toolPoints(:,2) toolPoints(:,3) ones(size(toolPoints,1),1)];
+    % Remember to add polishing depth, so it's transformation is defined
+    polishingT = [1 0 0 0
+                  0 1 0 0
+                  0 0 1 polishingDepth
+                  0 0 0 1];
+    % Calculate the transform with the polishing depth
+    toolTransform = toolTransform * polishingT;
+    % Transform the tool points
+    transformedToolLocation = toolTransform * curToolLocation';
+    % Save the tool points to a 3D matrix for later use
+    toolLocations(:,:,i) = transformedToolLocation(1:3,:)';
+    % Update the transform for use in contact are estimation
+    if useTestTrajectory == true
+        testTrajectory(i,:) = toolTransform(1:3,4)';
+        testTrajectoryAxis(:,:,i) = toolTransform(1:3,1:3);
+    else
+        toolTrajectory(i,1:3) = toolTransform(1:3,4)';
+        toolTrajectory(i,4:12) = reshape(toolTransform(1:3,1:3)',[1 9]);
+    end
 end
 
 % Create and save figures for illustration video
 if makeTrajectoryVideo == true
-    close all
-    for i = 1:size(toolLocations,3)
+    % Only use 2.5% of points if the real trajectory is used. Speeds up the
+    % process
+    if useTestTrajectory == false
+        videoStep = floor(size(toolLocations,3) / (size(toolLocations,3) * 0.025));
+    else
+        videoStep = 1;
+    end
+    figureIndex = 1;
+    for i = 1:videoStep:size(toolLocations,3)
         figure('visible','off') % Dont display the figure when creating them
         hold on
         title('Discretized tool points on trajectory path')
@@ -470,9 +504,9 @@ if makeTrajectoryVideo == true
         zlabel('Z [mm]')
         %zlim([0 max(points(:,1))/2])
         % Change the view of the 3D figure. This is around the x-axis
-        view(-80,20);
+        view(-20,50);
         % Plot point cloud
-        scatter3(points(:,1),points(:,2),points(:,3),3,points(:,3))
+        scatter3(pc.Location(:,1),pc.Location(:,2),pc.Location(:,3),3,pc.Location(:,3))
         % Plot trajectory
         if useTestTrajectory == true
             plot3(testTrajectory(:,1),testTrajectory(:,2),testTrajectory(:,3))
@@ -486,7 +520,8 @@ if makeTrajectoryVideo == true
         % Plot tool points
         plot3(toolLocations(:,1,i),toolLocations(:,2,i),toolLocations(:,3,i),'or')
         hold off
-        figureFrames(i) = getframe(gcf);
+        figureFrames(figureIndex) = getframe(gcf);
+        figureIndex = figureIndex + 1;
         clf(1) % Clear figure
     end
     
@@ -503,8 +538,10 @@ end
 
 %% ESTIMATING CONTACT AREA IN TRAJECTORY
 
-% I already know the transform, so i don't have to fit the plane
-% I still want to plot the plane though, for visualization purposes
+% Issues:
+% part 3 for test trajectory, seems to find to many points in range
+% Untested for the real trajectory
+
 
 % Procedure:
 % 1. Iterate through trajectory points
@@ -535,7 +572,7 @@ desiredToolPressure = 718; % [Pa]
 A = pi * R^2; % [mm^2] 
 
 % Matricies to store the points within the radius constraint and in contact
-pointsInRange = zeros(size(cloud.Location,1),3,trajectorySize);
+pointsInRange = zeros(size(pc.Location,1),3,trajectorySize);
 pointsInContact = pointsInRange;
 
 % Define the number of points the fitted plane is discretized with along
@@ -585,32 +622,28 @@ for i = 1:trajectorySize
     % Step 3:
     % Select all points from the point cloud that satisfy the radius 
     % constraint
-    % Define the current transform used depending on chosen trajectory
+    % Define the current transform used to construct plane normal
     if useTestTrajectory == true
-        curTransform = [testTrajectoryAxis(1,:,i)', testTrajectoryAxis(2,:,i)', testTrajectoryAxis(3,:,i)', planeCenter';
+        currentTrajectoryPoint = testTrajectory(i,:);
+        toolTransform = [testTrajectoryAxis(1,:,i)', testTrajectoryAxis(2,:,i)', testTrajectoryAxis(3,:,i)', currentTrajectoryPoint';
                         0 0 0 1];
     else
-        curTransform = [toolTrajectory(i,4:6) toolTrajectory(i,1);
+        toolTransform = [toolTrajectory(i,4:6) toolTrajectory(i,1);
                    toolTrajectory(i,7:9) toolTrajectory(i,2);
                    toolTrajectory(i,10:12) toolTrajectory(i,3);
                    0 0 0 1];
     end
+    zUnit = [1 0 1 1];
+    planeZUnit = toolTransform * zUnit';
+    planeZ = planeZUnit(1:3)';
+    planeNormal = planeZ - planeCenter;
     % Iterate over all point cloud points
     inRadiusIndex = 1;
-    for j = 1:size(cloud.Location,1)
+    for j = 1:size(pc.Location,1)
         % Get the ith point cloud point
-        curPoint = cloud.Location(j,:); 
+        curPoint = pc.Location(j,:); 
         % Compute the vector from the current point to the center of the plane
-        vecCenterPoint = curPoint - planeCenter;
-
-        % Construct a plane normal vector, it is just a transform in z
-        zUnitTransform = [1 0 0 0;
-                          0 1 0 0;
-                          0 0 1 1;
-                          0 0 0 1];
-        planeZTransform = curTransform * zUnitTransform;
-        planeZ = planeZTransform(1:3,4);
-        planeNormal = planeZ' - planeCenter;
+        vecCenterPoint = curPoint - planeCenter; % I think this is the other way around
 
         % Compute the perpendicular distance from the current point to the
         % plane normal vector
@@ -631,15 +664,18 @@ for i = 1:trajectorySize
     nonZeroCond = pointsInRange(:,1,i) > 0;
     numberOfInRangePoints = size(pointsInRange(nonZeroCond,:,i),1);
     unitArea = A / numberOfInRangePoints; % [mm^2]
-    
+
+    % This need to be redefined so that the z axis is correct. Currently 
+    % it's flipped 180 degrees
     % Step 5:
     % Find out how many points are in contact with the tool.
     curPointsInRange = [pointsInRange(1:numberOfInRangePoints,:,i) ones(numberOfInRangePoints,1)];
-    curPointsInRangeTransformed = inv(curTransform) * curPointsInRange';
+    curPointsInRangeTransformed = inv(toolTransform) * curPointsInRange';
     % Remove unused dimension
     curPointsInRangeTransformed = curPointsInRangeTransformed(1:3,:)';
-    % Filter points
-    positiveZs = curPointsInRangeTransformed(:,3) >= 0;
+    % Filter points. Counting negative Z's because the z-axis of the
+    % transformation is pointing downwards
+    positiveZs = curPointsInRangeTransformed(:,3) <= 0;
     % Number of contact points is obtained by summing the logical structure
     numberOfContactPoints = sum(positiveZs);
     pointsInContact(1:numberOfContactPoints,:,i) = curPointsInRange(positiveZs,1:3);
@@ -679,6 +715,8 @@ end
 % Variable used to control which trajectory point contact area estiamation
 % is displayed
 if displaySingleToolContactArea == true
+    % Failsafe for plotting
+    trajectoryPointDisplay = min([trajectoryPointDisplay, trajectorySize]);
     if ishandle(7) == true
         close(7)
     end
