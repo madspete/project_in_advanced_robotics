@@ -3,30 +3,43 @@ close all
 clc
 
 % Notes:
-% Tables weren't plane, which meant that a there was a slight rotation around
-% the x axis for the object frame that wasn't accounted for. This was 
-% visible when loading the trajectories, since a trajectory that was
+% Tables weren't plane, which meant that a there was a slight rotation 
+% around the x axis for the object frame that wasn't accounted for. This 
+% was visible when loading the trajectories, since a trajectory that was
 % supposed to be flat (non changeing in z) actually was.
+% ADD THE HEIGHT OF THE FOAM TO THE TRANSFORM
+% GET FORCE MEASUREMENTS FROM TRAJECTORY, CALCULATE PRESSURE IN EACH POINT
+% WITH ESTIMATED CONTACT AREA AND PLOT THAT VERSUS THE CONSTANT DESIRED
+% PRESSURE. MAYBE THIS CAN BE SOME SORT OF INTRODUCTION.
 
-% Run the script while located in the directory where the script is located
+% Run the script while located in the directory where the script is in the
+% folder view.
 
-% REQUIREMENTS:
+% This script works in the robot base frame, meaning that origo in the
+% figure corresponds to origo [0,0,0] in the robot base frame.
+
+% REQUIRED PACKAGES:
 % Computer Vision Toolbox
 % Robotics System Toolbox
 
-% --------- CONTROL OF TRAJECTORY TYPE ----------
-% Control if a radomly generated trajectory is used, or if a recorded
-% trajectory is loaded
-useTestTrajectory = true;
+% Display the time the script was started
+time = clock;
+tic
+displayTimeAndStatus('STATUS: Script was started',time(4),time(5),time(6),0)
+
+% --------- CONTROL OF TRAJECTORY USED ----------
+% Control if a randomly generated or a recorded trajectory is loaded
+useTestTrajectory = false;
 
 % ---------- FIGURE DISPLAY CONTROL ----------
-% Display point cloud
+% Control which figures are displayed running the script
+% Display point cloud after loading and preprocessing
 displayPointCloud = false;
 % Display discretized tool points
 showToolPoints = false;
-% Display trajectory
-showTrajectory = false;
-% Create video of toolpath on trajectory
+% Display trajectory on the point cloud object
+showTrajectory = true;
+% Create video of the toolpath on the trajectory
 makeTrajectoryVideo = false;
 fileName = 'TrajectoryMovement.avi';
 % Display estimated contact area and force graph
@@ -35,11 +48,10 @@ showEstimatedAreaAndContact = true;
 trajectoryPointDisplay = 12;
 displaySingleToolContactArea = true;
 
-%% LOADING AND PREPROCSEEING OF POINT CLOUD   
-
+%% LOADING AND PREPROCSEEING OF POINT CLOUD
 % Loaded file is a modified form of the original CAD-file, such that a 
 % smooth surface is obtained.
-% Load .ply point cloud. Distamces are in mm.
+% Load .ply point cloud. Distamces are in mm
 orgCloud = pcread(strcat(pwd, filesep, 'pointClouds', filesep, ...
                          'objectPointCloudSimplified.ply'));
 
@@ -57,7 +69,7 @@ points(:,3) = px;
 points = points * [-1 0 0;
                    0 -1 0;
                    0 0 1];
-% Rotate pi around Y-axis to get flat side of the object up
+% Rotate -pi radians around the Y-axis to get the bottom of the object up
 YRotAng = -pi; % [rad]
 YRotMat = [cos(YRotAng)     0       sin(YRotAng);
            0                1       0;
@@ -71,11 +83,12 @@ orgZMin = min(points(:,3));
 points = [points(:,1)+abs(orgXMin) points(:,2)+abs(orgYMin) points(:,3)+abs(orgZMin)];
 % Remove the "bottom" of the object, i.e. the surface of the object in
 % contact with the table. This is done to make contact area estimation
-% easier. Threshold is chosen experimentally
+% easier, since the tool is never be in contact with the bottom, making the
+% points are irrelevant. Threshold is chosen experimentally
 pointPreprocessingZThreshold = 1; % [mm]
 points = points(points(:,3) > pointPreprocessingZThreshold,:);
 
-% Create and optionally display point cloud
+% Create and optionally display the point cloud
 cloud = pointCloud(points);
 if displayPointCloud == true
     if ishandle(1) == true
@@ -92,8 +105,32 @@ if displayPointCloud == true
     zlim([0 max(points(:,1))/2])
 end
 
-%% DEFINE AND DISCRETIZE POLISHING TOOL 
+timeSinceStart = toc;
+timeMin = 0;
+timeHour = 0;
+timeSec = round(mod(timeSinceStart,60));
+if time(6) + timeSec <= 60
+    time(6) = time(6) + timeSec; 
+else
+    timeMin = 1;
+    time(6) = mod(time(6) + timeSec,60);
+end
+timeMin = timeMin + round(mod(timeSinceStart/60,60));
+if time(5) + timeMin <= 60
+    time(5) = time(5) + timeMin; 
+else
+    timeHour = 1;
+    time(5) = mod(time(5) + timeMin,60);
+end
+timeHour = timeHour + round(floor(timeSinceStart/3600));
+if time(4) + timeHour <= 24
+    time(4) = time(4) + timeHour; 
+else
+    time(4) = 0;
+end
+displayTimeAndStatus('STATUS: Done loading and preprocessing the point cloud at',time(4),time(5),time(6),toc)
 
+%% DEFINE AND DISCRETIZE POLISHING TOOL 
 % Radius of the tool
 R = 125/2; % [mm]
 
@@ -124,7 +161,7 @@ for j = toolRadiusStep:toolRadiusStep:R
     radiusIndex = radiusIndex + 1;
 end
 
-% Plot the tool points
+% Optionally, plot the tool points
 if showToolPoints == true
     if ishandle(2) == true
         close(2)
@@ -136,46 +173,51 @@ if showToolPoints == true
     ylabel('Y [mm]')
     zlabel('Z [mm]')
 end
+displayTimeAndStatus('STATUS: Done discretizing tool',time(4),time(5),time(6),toc)
 
 %% GENERATE A TRAJECTORY ACROSS THE SURFACE OF THE OBJECT
 
 if useTestTrajectory == true
-    % IDEA
+    % IDEA:
     % Could also just do something like picking a point where x=0, then
-    % increase x- and y-value of point by step and pick the closest point as 
-    % the next point. This will yield a non-linear trajectory, but they are 
-    % also not linear when recorded using LfD.
+    % increase x- and y-value of point by step and pick the closest point 
+    % as the next point. This will yield a non-linear trajectory, but they 
+    % are also not linear when recorded using LfD.
     
-    % Choose random X-value for start and end point of trajectory.
-    % They are limited such that the start and end-points are always within the
-    % object.
+    % Choose a random X-value for the start and end point of the trajectory
+    % They are limited such that the start and end-points are always within
+    % the object.
     startPoint = [(150 + 150 * rand()) 0];
     endPoint = [(150 + 150 * rand()) max(cloud.Location(:,2))];
     % Calculate the vector from start to finish
     randTrajVec = endPoint - startPoint;
-    % Discretize distance into points
+    % Discretize distance into a desired amount of points
     numberOfPoints = 20;
-    % Initialize matrix containing trajectory points 
+    % Initialize matrix to store the trajectory points 
     testTrajectory = [zeros(numberOfPoints,3)] + [startPoint 0];
     % Calculate step-size in X and Y direction
     xDiff = endPoint(1) - startPoint(1);
     xStep = xDiff/(numberOfPoints-1);
     yDiff = endPoint(2) - startPoint(2);
     yStep = yDiff/(numberOfPoints-1);
-    % Iterate through all points and add the difference to each point. 
-    % Then select all points inside radius constraint, and set the z value of 
-    % the trajectory point to the avg of the 10% of points with the highest z
-    trajR = 10; % [mm]
-    zValPercent = 0.1; % Percent of points that will be used to calculate z-value 
+    % Iterate through all points and update them with the step size, 
+    % then select all points inside radius constraint, and set the z-value 
+    % of the trajectory point to the average of the 10% of points with the 
+    % highest z-value
+    trajR = 10; % [mm] Radius constraint
+    % Percent of points that will be used to calculate z-value 
+    zValPercent = 0.1;
     for i = 1:numberOfPoints
         pointIncrement = [(i-1)*xStep (i-1)*yStep 0];
         curPoint = testTrajectory(i,:) + pointIncrement;
-        % Creating selection conditions based on radius
+        % Creating selection conditions based on the radius constraint
         cond1 = cloud.Location(:,1) <= (curPoint(1) + trajR);
         cond2 = cloud.Location(:,1) >= (curPoint(1) - trajR);
         cond3 = cloud.Location(:,2) <= (curPoint(2) + trajR);
         cond4 = cloud.Location(:,2) >= (curPoint(2) - trajR);
-        % Select points and calculate mean z of 10% of the largest
+        % Select points inside radius contstraint,  calculate average 
+        % z-value and set the z-value of the trajectory to the 10% of the 
+        % largest z-values
         zValsInRange = cloud.Location(cond1 & cond2 & cond3 & cond4,3);
         avgZ = mean(maxk(zValsInRange,ceil(size(zValsInRange,1)*zValPercent)));
         % Save point in trajectory
@@ -183,14 +225,14 @@ if useTestTrajectory == true
         testTrajectory(i,:) = curPoint;
     end
     
-    % Plot the trajectory and the point cloud
+    % Potentially, plot the trajectory and the point cloud
     if showTrajectory == true
         if ishandle(3) == true
             close(3)
         end
         figure(3)
         hold on
-        % Change the view of the 3D figure. This is around the x-axis
+        % Change the view of the 3D figure
         view(-70,25); 
         plot3(testTrajectory(:,1),testTrajectory(:,2),testTrajectory(:,3))
         scatter3(cloud.Location(:,1),cloud.Location(:,2),cloud.Location(:,3),5)
@@ -204,11 +246,9 @@ if useTestTrajectory == true
         zlim([0 max(points(:,1))/2])
     end
 end
+displayTimeAndStatus('STATUS: Done generating test trajectory',time(4),time(5),time(6),toc)
 
 %% LOAD TRAJECTORY AND APPLY TRANSFORMATIONS TO GET IN OBJECT BASE FRAME
-
-% POTENTIAL IMPROVEMENTS:
-% Plot the frame for every x'th trajectory point
 
 % Procedure:
 % Step 1: Load file with robot trajectory, convert translation into mm and
@@ -218,7 +258,7 @@ end
 %         frame and apply it to the point cloud to get them transfromed
 %         into the robot base frame
 % Step 4: Display the TCP trajectory, tool trajectory and point cloud in 
-%         the robot base frame, as well as poin
+%         the robot base frame, as well as point cloud
 
 if useTestTrajectory == false
 
@@ -232,9 +272,8 @@ if useTestTrajectory == false
     zDiff = robotTCPZdiff - toolHeight;
 
     % Step 1:
-    % Loading of the recorded trajectory. Transformations in the recorded
-    % trajectory is between the robot base frame and the TCP frame of the
-    % robot.
+    % Loading of the recorded trajectory. Transformations are from the
+    % robot base frame to the TCP frame
     trajectory = readtable(strcat(pwd, filesep, '..', filesep, ...
                            'trajectory_learning', filesep, ...
                            'demonstrations', filesep, 'tcptrial1.csv'));
@@ -246,20 +285,21 @@ if useTestTrajectory == false
     TCPTrajectory(:,1:3) = TCPTrajectory(:,1:3) * 1000; 
     % Save a copy for displaying
     TCPTrajectoryCopy = TCPTrajectory;
-    % Initialize matrix for storing tool trajectory. first three elements
+    % Initialize matrix for storing tool trajectory. First three elements
     % are translation, while element 4:6 is the first row vector of the
-    % rotation matrix, 7:9 is the second, and 10:12 is the third
+    % rotation matrix, 7:9 the second, and 10:12 the third
     toolTrajectory = zeros(size(TCPTrajectory,1),12);
     
     % Step 2:
-    % Define the transformation between the robot TCP frame and the frame
-    % of the tool. This is just an extension of the tool height along Z
+    % Define the transformation from the TCP frame to the tool frame. 
+    % This is just an extension of TCP frame along its z-axis
     TTCPTool = [1 0 0 0;
                 0 1 0 0;
                 0 0 1 toolHeight;
                 0 0 0 1];
-    % Apply transformation from robot frame to tool frame by multiplying
-    % all of the transformations.
+    % Calculate transformation from the robot base frame to the tool frame 
+    % by multiplying the transformation from robot base frame to TCP frame 
+    % with the transformation for TCP frame to tool frame
     for i = 1:size(TCPTrajectory,1)
         orgTranslation = TCPTrajectory(i,1:3);
         orgRotation = quat2rotm(TCPTrajectory(i,4:7));
@@ -272,10 +312,13 @@ if useTestTrajectory == false
 
     % Step 3:
     % Define the translation between the robot base frame and the object 
-    % frame.
+    % frame. This translation was measured by placing the robot in the
+    % object base frame and reading the values from the teach pendant
     robotObjectTranslation = [341 -108.8 zDiff];
     % Define the rotation between the robot base frame and the object frame
-    % It is rotated 90 degrees clockwise around the z robot axis
+    % It is rotated 90 degrees clockwise around the z robot axis. The 22.26
+    % degrees are from the angle the robot base frame is rotated bt
+    % default. It was also read from the teach pendant
     ang = 22.26-90;
     robotObjectRotation = [cosd(ang) -sind(ang) 0;
                            sind(ang) cosd(ang)  0;
@@ -285,20 +328,20 @@ if useTestTrajectory == false
                     0 0 0 1];
     % Get the point cloud points
     points = cloud.Location;
-    % Apply transformation to point cloud points. This is defined for 
-    % column-vectors, hence the transpose of curToolLocation
+    % Apply transformation to point cloud points. This operation is defined
+    % for column-vectors
     transformedPoints = TObjectRobot * [points ones(size(points,1),1)]';
     transformedCloud = pointCloud(transformedPoints(1:3,:)');
 
     % Step 4:
-    % Display data
+    % Optionally, display data
     if showTrajectory == true
         if ishandle(4) == true
             close(4)
         end
         figure(4)
         hold on
-        % Change the view of the 3D figure. This is around the x-axis
+        % Change the view of the 3D figure
         view(-45,35);
         % Plotting TCP trajectory
         plot3(TCPTrajectoryCopy(:,1),TCPTrajectoryCopy(:,2),TCPTrajectoryCopy(:,3),'og')
@@ -317,6 +360,7 @@ if useTestTrajectory == false
         %zlim([0 max(points(:,1))/2])
     end
 end
+displayTimeAndStatus('STATUS: Done loading real trajectory',time(4),time(5),time(6),toc)
 
 %% MOVING THE TOOL ALONG THE TRAJECTORY
 
@@ -498,11 +542,11 @@ if makeTrajectoryVideo == true
         hold on
         title('Discretized tool points on trajectory path')
         xlabel('X [mm]')
-        %xlim([0 max(points(:,1))])
+        xlim([min(pc.Location(:,1))-50 max(pc.Location(:,1))+50])
         ylabel('Y [mm]')
-        %ylim([0 max(points(:,1))])
+        ylim([min(pc.Location(:,2))-50 max(pc.Location(:,2))+50])
         zlabel('Z [mm]')
-        %zlim([0 max(points(:,1))/2])
+        zlim([min(pc.Location(:,3))-10 max(pc.Location(:,3))+10])
         % Change the view of the 3D figure. This is around the x-axis
         view(-20,50);
         % Plot point cloud
@@ -535,6 +579,7 @@ if makeTrajectoryVideo == true
     end
     close(videoWriterObj);
 end
+displayTimeAndStatus('STATUS: Done transforming tool points to trajectory points',time(4),time(5),time(6),toc)
 
 %% ESTIMATING CONTACT AREA IN TRAJECTORY
 
@@ -751,3 +796,6 @@ if displaySingleToolContactArea == true
     view(-80,20);
     hold off
 end
+
+displayTimeAndStatus('STATUS: Finished estimating contact forces!',time(4),time(5),time(6),toc)
+printElapsedTime(time(4),time(5),time(6))
