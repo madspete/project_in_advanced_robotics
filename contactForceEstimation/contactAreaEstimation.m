@@ -263,7 +263,8 @@ displayTimeAndStatus('STATUS: Done generating test trajectory',time(4),time(5),t
 if useTestTrajectory == false
 
     % Constants
-    % Height of the tool. The three mm is from the height of the cardboard
+    % Height of the tool, plus the padding mounted on it. The new
+    % measurement is 43 mm
     toolHeight = 45 + 3; % [mm]
     % Z-difference between robot base frame and TCP when the tool is
     % touching the table
