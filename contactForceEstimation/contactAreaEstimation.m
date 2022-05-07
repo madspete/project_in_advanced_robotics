@@ -25,11 +25,18 @@ clc
 % Display the time the script was started
 time = clock;
 tic
-displayTimeAndStatus('STATUS: Script was started',time(4),time(5),time(6),0)
 
 % --------- CONTROL OF TRAJECTORY USED ----------
 % Control if a randomly generated or a recorded trajectory is loaded
 useTestTrajectory = false;
+
+if useTestTrajectory == true
+    statusString = 'STATUS: Script was started using TEST trajectory';
+else
+    statusString = 'STATUS: Script was started using REAL trajectory';
+end
+
+displayTimeAndStatus(statusString,time(4),time(5),time(6),0)
 
 % ---------- FIGURE DISPLAY CONTROL ----------
 % Control which figures are displayed running the script
@@ -40,7 +47,7 @@ showToolPoints = false;
 % Display trajectory on the point cloud object
 showTrajectory = true;
 % Create video of the toolpath on the trajectory
-makeTrajectoryVideo = false;
+makeTrajectoryVideo = true;
 fileName = 'TrajectoryMovement.avi';
 % Display estimated contact area and force graph
 showEstimatedAreaAndContact = true;
@@ -245,8 +252,8 @@ if useTestTrajectory == true
         zlabel('Z [mm]')
         zlim([0 max(points(:,1))/2])
     end
+    displayTimeAndStatus('STATUS: Done generating test trajectory',time(4),time(5),time(6),toc)
 end
-displayTimeAndStatus('STATUS: Done generating test trajectory',time(4),time(5),time(6),toc)
 
 %% LOAD TRAJECTORY AND APPLY TRANSFORMATIONS TO GET IN OBJECT BASE FRAME
 
@@ -572,7 +579,7 @@ if makeTrajectoryVideo == true
     
     %Make an illustration video
     videoWriterObj = VideoWriter(fileName);
-    videoWriterObj.FrameRate = 2;
+    videoWriterObj.FrameRate = 20;
     open(videoWriterObj);
     for i=1:length(figureFrames)
      curFrame = figureFrames(i);
