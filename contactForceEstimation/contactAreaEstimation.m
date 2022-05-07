@@ -678,7 +678,7 @@ for i = 1:trajectorySize
                    toolTrajectory(i,10:12) toolTrajectory(i,3);
                    0 0 0 1];
     end
-    zUnit = [1 0 1 1];
+    zUnit = [0 0 1 1];
     planeZUnit = toolTransform * zUnit';
     planeZ = planeZUnit(1:3)';
     planeNormal = planeZ - planeCenter;
