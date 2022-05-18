@@ -10,7 +10,7 @@ clc
 % ADD THE HEIGHT OF THE FOAM TO THE TRANSFORM
 % GET FORCE MEASUREMENTS FROM TRAJECTORY, CALCULATE PRESSURE IN EACH POINT
 % WITH ESTIMATED CONTACT AREA AND PLOT THAT VERSUS THE CONSTANT DESIRED
-% PRESSURE. MAYBE THIS CAN BE SOME SORT OF INTRODUCTION.
+% PRESSURE.
 
 % Run the script while located in the directory where the script is in the
 % folder view.
@@ -45,15 +45,15 @@ displayPointCloud = false;
 % Display discretized tool points
 showToolPoints = false;
 % Display trajectory on the point cloud object
-showTrajectory = true;
+showTrajectory = false;
 % Create video of the toolpath on the trajectory
-makeTrajectoryVideo = true;
+makeTrajectoryVideo = false;
 fileName = 'TrajectoryMovement.avi';
 % Display estimated contact area and force graph
-showEstimatedAreaAndContact = true;
+showEstimatedAreaAndContact = false;
 % Display contact area and points in a specific trajectory point
-trajectoryPointDisplay = 12;
-displaySingleToolContactArea = true;
+trajectoryPointDisplay = 3000;
+displaySingleToolContactArea = false;
 
 %% LOADING AND PREPROCSEEING OF POINT CLOUD
 % Loaded file is a modified form of the original CAD-file, such that a 
@@ -111,30 +111,6 @@ if displayPointCloud == true
     zlabel('Z [mm]')
     zlim([0 max(points(:,1))/2])
 end
-
-timeSinceStart = toc;
-timeMin = 0;
-timeHour = 0;
-timeSec = round(mod(timeSinceStart,60));
-if time(6) + timeSec <= 60
-    time(6) = time(6) + timeSec; 
-else
-    timeMin = 1;
-    time(6) = mod(time(6) + timeSec,60);
-end
-timeMin = timeMin + round(mod(timeSinceStart/60,60));
-if time(5) + timeMin <= 60
-    time(5) = time(5) + timeMin; 
-else
-    timeHour = 1;
-    time(5) = mod(time(5) + timeMin,60);
-end
-timeHour = timeHour + round(floor(timeSinceStart/3600));
-if time(4) + timeHour <= 24
-    time(4) = time(4) + timeHour; 
-else
-    time(4) = 0;
-end
 displayTimeAndStatus('STATUS: Done loading and preprocessing the point cloud at',time(4),time(5),time(6),toc)
 
 %% DEFINE AND DISCRETIZE POLISHING TOOL 
@@ -175,7 +151,7 @@ if showToolPoints == true
     end
     figure(2)
     plot3(toolPoints(:,1),toolPoints(:,2),toolPoints(:,3),'o');
-    title('Discretized circle points')
+    title('Discretized tool points')
     xlabel('X [mm]')
     ylabel('Y [mm]')
     zlabel('Z [mm]')
@@ -367,14 +343,10 @@ if useTestTrajectory == false
         zlabel('Z [mm]')
         %zlim([0 max(points(:,1))/2])
     end
+    displayTimeAndStatus('STATUS: Done loading real trajectory',time(4),time(5),time(6),toc)
 end
-displayTimeAndStatus('STATUS: Done loading real trajectory',time(4),time(5),time(6),toc)
 
 %% MOVING THE TOOL ALONG THE TRAJECTORY
-
-% POTENTIAL IMPROVEMENTS:
-% Plot the frame for every trajectory point
-% Plot the plane when using the tool trajectory
 
 % ---------- IF THE TEST TRAJECTORY IS CHOSEN, THE FOLLOWING STEPS ARE PERFORMED FIRST ----------
 % Step 1: Iterate through all test trajectory points
@@ -591,11 +563,6 @@ displayTimeAndStatus('STATUS: Done transforming tool points to trajectory points
 
 %% ESTIMATING CONTACT AREA IN TRAJECTORY
 
-% Issues:
-% part 3 for test trajectory, seems to find to many points in range
-% Untested for the real trajectory
-
-
 % Procedure:
 % 1. Iterate through trajectory points
 % 2. Fit plane to tool points in the current trajectory point
@@ -696,8 +663,7 @@ for i = 1:trajectorySize
         % Get the ith point cloud point
         curPoint = pc.Location(j,:); 
         % Compute the vector from the current point to the center of the plane
-        vecCenterPoint = curPoint - planeCenter; % I think this is the other way around
-
+        vecCenterPoint = curPoint - planeCenter;
         % Compute the perpendicular distance from the current point to the
         % plane normal vector
         % See following link:
@@ -718,8 +684,6 @@ for i = 1:trajectorySize
     numberOfInRangePoints = size(pointsInRange(nonZeroCond,:,i),1);
     unitArea = A / numberOfInRangePoints; % [mm^2]
 
-    % This need to be redefined so that the z axis is correct. Currently 
-    % it's flipped 180 degrees
     % Step 5:
     % Find out how many points are in contact with the tool.
     curPointsInRange = [pointsInRange(1:numberOfInRangePoints,:,i) ones(numberOfInRangePoints,1)];
@@ -807,3 +771,16 @@ end
 
 displayTimeAndStatus('STATUS: Finished estimating contact forces!',time(4),time(5),time(6),toc)
 printElapsedTime(time(4),time(5),time(6))
+
+%% Plot two force profiles for testing
+load('tempEstimationMatrix.mat') % Manually saved
+figure(20)
+hold on
+plot(1:trajectorySize, estimationMatrix(:,3))
+plot(1:trajectorySize,tempEstimationMatrix(:,3))
+title(strcat('With desired contact pressure p = ', num2str(desiredToolPressure), ' [Pa]'))
+xlabel('Test trajectory point')
+ylabel('Estimated contact force [N]')
+hold off
+
+diff = abs(sum(estimationMatrix(:,3)) - sum(tempEstimationMatrix(:,3))) / size(estimationMatrix(:,3),1)
