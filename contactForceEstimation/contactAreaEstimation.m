@@ -3,11 +3,6 @@ close all
 clc
 
 % Notes:
-% Tables weren't plane, which meant that a there was a slight rotation 
-% around the x axis for the object frame that wasn't accounted for. This 
-% was visible when loading the trajectories, since a trajectory that was
-% supposed to be flat (non changeing in z) actually was.
-% ADD THE HEIGHT OF THE FOAM TO THE TRANSFORM
 % GET FORCE MEASUREMENTS FROM TRAJECTORY, CALCULATE PRESSURE IN EACH POINT
 % WITH ESTIMATED CONTACT AREA AND PLOT THAT VERSUS THE CONSTANT DESIRED
 % PRESSURE.
@@ -52,7 +47,7 @@ fileName = 'TrajectoryMovement.avi';
 % Display estimated contact area and force graph
 showEstimatedAreaAndContact = false;
 % Display contact area and points in a specific trajectory point
-trajectoryPointDisplay = 3000;
+trajectoryPointDisplay = 16000;
 displaySingleToolContactArea = false;
 
 %% LOADING AND PREPROCSEEING OF POINT CLOUD
@@ -77,11 +72,20 @@ points = points * [-1 0 0;
                    0 -1 0;
                    0 0 1];
 % Rotate -pi radians around the Y-axis to get the bottom of the object up
-YRotAng = -pi; % [rad]
+YRotAng = pi; % [rad]
 YRotMat = [cos(YRotAng)     0       sin(YRotAng);
            0                1       0;
            -sin(YRotAng)    0       cos(YRotAng)];
 points = points * YRotMat;
+
+% Only used for the new setup
+% Rotate pi rad around z to change x-y axis
+ZRotAng = 0.5*pi; % [rad]
+ZRotMat = [cos(ZRotAng) -sin(ZRotAng) 0;
+           sin(ZRotAng) cos(ZRotAng)  0;
+           0         0          1];
+points = points * ZRotMat;
+
 % Add the absolute value of the minimum of all points in the XYZ-axis to 
 % their  respective axis to get all positive values
 orgXMin = min(points(:,1));
@@ -105,9 +109,9 @@ if displayPointCloud == true
     scatter3(points(:,1),points(:,2),points(:,3),5,points(:,3))
     title('Point cloud of the object to be polished')
     xlabel('X [mm]')
-    xlim([0 max(points(:,1))])
+    xlim([0 max(points(:,2))])
     ylabel('Y [mm]')
-    ylim([0 max(points(:,1))])
+    ylim([0 max(points(:,2))])
     zlabel('Z [mm]')
     zlim([0 max(points(:,1))/2])
 end
@@ -246,13 +250,13 @@ end
 if useTestTrajectory == false
 
     % Constants
-    % Height of the tool, plus the padding mounted on it. The new
-    % measurement is 43 mm
-    toolHeight = 45 + 3; % [mm]
+    % Height of the tool, plus the padding mounted on it. Just cardboard is
+    % 3 mm
+    toolHeight = 45 + 40; % [mm]
     % Z-difference between robot base frame and TCP when the tool is
     % touching the table
-    robotTCPZdiff = 16; % [mm]
-    % Z-difference from table surface to the robot base frame
+    robotTCPZdiff = 42.78; % [mm] # Value on old setup: 16
+    % Z-difference from robot base frame to table surface
     zDiff = robotTCPZdiff - toolHeight;
 
     % Step 1:
@@ -260,7 +264,7 @@ if useTestTrajectory == false
     % robot base frame to the TCP frame
     trajectory = readtable(strcat(pwd, filesep, '..', filesep, ...
                            'trajectory_learning', filesep, ...
-                           'demonstrations', filesep, 'tcptrial1.csv'));
+                           'demonstrations', filesep, 'tcp.csv')); % Old is tcptrial1.csv
     % Rename table names
     trajectory.Properties.VariableNames = ["ns","s","X","Y","Z","W","WX","WY","WZ"];
     % Extract translation and rotation into matrix
@@ -298,15 +302,20 @@ if useTestTrajectory == false
     % Define the translation between the robot base frame and the object 
     % frame. This translation was measured by placing the robot in the
     % object base frame and reading the values from the teach pendant
-    robotObjectTranslation = [341 -108.8 zDiff];
+    robotObjectTranslation = [-173.89 -317.3 zDiff]; % Old values: X: 341, Y: -108.8
     % Define the rotation between the robot base frame and the object frame
+    % ----- OLD -----
     % It is rotated 90 degrees clockwise around the z robot axis. The 22.26
     % degrees are from the angle the robot base frame is rotated bt
     % default. It was also read from the teach pendant
-    ang = 22.26-90;
+    % ----- NEW -----
+    % It is rotated 90 degrees counter-clockwise around the z robot axis. The 22.26
+    % degrees are from the angle the robot base frame is rotated bt
+    % default. It was also read from the teach pendant
+    ang = 180+22.05; % Old: 22.26-90
     robotObjectRotation = [cosd(ang) -sind(ang) 0;
                            sind(ang) cosd(ang)  0;
-                           0     0      1];
+                           0         0          1];
     % Define transformation matrix from robot frame to object frame
     TObjectRobot = [robotObjectRotation robotObjectTranslation';
                     0 0 0 1];
@@ -479,10 +488,10 @@ for i = 1:trajectorySize
         toolTransform = [testTrajectoryAxis(1,:,i)', testTrajectoryAxis(2,:,i)', testTrajectoryAxis(3,:,i)', currentTrajectoryPoint';
                         0 0 0 1];
     else
-        toolTransform = [toolTrajectory(i,4:6) toolTrajectory(i,1);
-                   toolTrajectory(i,7:9) toolTrajectory(i,2);
-                   toolTrajectory(i,10:12) toolTrajectory(i,3);
-                   0 0 0 1];
+        toolTransform = [toolTrajectory(i,4), toolTrajectory(i,7), toolTrajectory(i,10), toolTrajectory(i,1);
+                         toolTrajectory(i,5), toolTrajectory(i,8), toolTrajectory(i,11), toolTrajectory(i,2);
+                         toolTrajectory(i,6), toolTrajectory(i,9), toolTrajectory(i,12), toolTrajectory(i,3);
+                         0                    0                    0                     1];
     end
     % Get a copy of the tool points to transform.
     curToolLocation = [toolPoints(:,1) toolPoints(:,2) toolPoints(:,3) ones(size(toolPoints,1),1)];
@@ -528,7 +537,7 @@ if makeTrajectoryVideo == true
         zlabel('Z [mm]')
         zlim([min(pc.Location(:,3))-10 max(pc.Location(:,3))+10])
         % Change the view of the 3D figure. This is around the x-axis
-        view(-20,50);
+        view(20,50);
         % Plot point cloud
         scatter3(pc.Location(:,1),pc.Location(:,2),pc.Location(:,3),3,pc.Location(:,3))
         % Plot trajectory
@@ -586,7 +595,7 @@ displayTimeAndStatus('STATUS: Done transforming tool points to trajectory points
 % per square foot.
 % https://meguiarsonline.com/forum/information-station/how-to-articles/3079-how-to-use-the-g-100-to-remove-swirls?2965-How-to-use-the-G-100-to-remove-swirls=
 % 15 pounds per square foot is used, which is around 718 Pa
-desiredToolPressure = 718; % [Pa]
+desiredToolPressure = 718 * 2.5; % [Pa] * 25 for first experiment
 
 % Area of the tool
 A = pi * R^2; % [mm^2] 
@@ -680,7 +689,7 @@ for i = 1:trajectorySize
     % contributes to the area of the polishing tool.
     % Since pointsInRangeRange are stored in one big 3D matrix, ignore 
     % zeros to get the true number of points
-    nonZeroCond = pointsInRange(:,1,i) > 0;
+    nonZeroCond = pointsInRange(:,1,i) ~= 0;
     numberOfInRangePoints = size(pointsInRange(nonZeroCond,:,i),1);
     unitArea = A / numberOfInRangePoints; % [mm^2]
 
@@ -753,8 +762,8 @@ if displaySingleToolContactArea == true
                  [toolPlaneDiscretizationStep toolPlaneDiscretizationStep]))
     % Since pointsInRange and pointsInContact are stored in one big matrix, 
     % ignore zeros to get the actual points
-    nonZeroCondInRange = pointsInRange(:,1,trajectoryPointDisplay) > 0;
-    nonZeroCondInContact = pointsInContact(:,1,trajectoryPointDisplay) > 0;
+    nonZeroCondInRange = pointsInRange(:,1,trajectoryPointDisplay) ~= 0;
+    nonZeroCondInContact = pointsInContact(:,1,trajectoryPointDisplay) ~= 0;
     scatter3(pointsInRange(nonZeroCondInRange,1,trajectoryPointDisplay), ...
           pointsInRange(nonZeroCondInRange,2,trajectoryPointDisplay), ...
           pointsInRange(nonZeroCondInRange,3,trajectoryPointDisplay),3,'r')
@@ -773,7 +782,7 @@ displayTimeAndStatus('STATUS: Finished estimating contact forces!',time(4),time(
 printElapsedTime(time(4),time(5),time(6))
 
 %% Plot two force profiles for testing
-load('tempEstimationMatrix.mat') % Manually saved
+load('tempEstimationMatrix.mat'); % Manually saved
 figure(20)
 hold on
 plot(1:trajectorySize, estimationMatrix(:,3))
@@ -783,4 +792,276 @@ xlabel('Test trajectory point')
 ylabel('Estimated contact force [N]')
 hold off
 
+[h,p] = ttest2(estimationMatrix(:,3),tempEstimationMatrix(:,3))
+
 diff = abs(sum(estimationMatrix(:,3)) - sum(tempEstimationMatrix(:,3))) / size(estimationMatrix(:,3),1)
+
+%% Mads plot 1
+% Constants
+% Height of the tool, plus the padding mounted on it. Just cardboard is
+% 3 mm
+toolHeight = 45 + 40; % [mm]
+% Z-difference between robot base frame and TCP when the tool is
+% touching the table
+robotTCPZdiff = 42.78; % [mm] # Value on old setup: 16
+% Z-difference from robot base frame to table surface
+zDiff = robotTCPZdiff - toolHeight;
+
+% Step 1:
+% Loading of the recorded trajectory. Transformations are from the
+% robot base frame to the TCP frame
+filename = "trial";
+figure(4)
+hold on
+% Change the view of the 3D figure
+view(-45,35);
+for j = 1:3
+    name = strcat(filename,num2str(j),".csv");
+    trajectory = readtable(name); % Old is tcptrial1.csv
+    % Rename table names
+    trajectory.Properties.VariableNames = ["ns","s","X","Y","Z","W","WX","WY","WZ"];
+    % Extract translation and rotation into matrix
+    TCPTrajectory = trajectory{:,["X","Y","Z","W","WX","WY","WZ"]};
+    % Change units of translation into mm
+    TCPTrajectory(:,1:3) = TCPTrajectory(:,1:3) * 1000; 
+    % Save a copy for displaying
+    TCPTrajectoryCopy = TCPTrajectory;
+    % Initialize matrix for storing tool trajectory. First three elements
+    % are translation, while element 4:6 is the first row vector of the
+    % rotation matrix, 7:9 the second, and 10:12 the third
+    toolTrajectory = zeros(size(TCPTrajectory,1),12);
+    
+    % Step 2:
+    % Define the transformation from the TCP frame to the tool frame. 
+    % This is just an extension of TCP frame along its z-axis
+    TTCPTool = [1 0 0 0;
+                0 1 0 0;
+                0 0 1 toolHeight;
+                0 0 0 1];
+    % Calculate transformation from the robot base frame to the tool frame 
+    % by multiplying the transformation from robot base frame to TCP frame 
+    % with the transformation for TCP frame to tool frame
+    for i = 1:size(TCPTrajectory,1)
+        orgTranslation = TCPTrajectory(i,1:3);
+        orgRotation = quat2rotm(TCPTrajectory(i,4:7));
+        orgTransformation = [orgRotation orgTranslation';
+                             0 0 0 1];
+        newTransform = orgTransformation * TTCPTool;
+        toolTrajectory(i,1:3) = newTransform(1:3,4);
+        toolTrajectory(i,4:12) = reshape(newTransform(1:3,1:3),[1 9]);
+    end
+    % Plotting tool trajectory
+    if j == 1
+        option = 'ob';
+    elseif j == 2
+        option = 'og';
+    elseif j == 3
+        option = 'or';
+    end
+    plot3(toolTrajectory(:,1),toolTrajectory(:,2),toolTrajectory(:,3),option)
+end
+% Step 3:
+% Define the translation between the robot base frame and the object 
+% frame. This translation was measured by placing the robot in the
+% object base frame and reading the values from the teach pendant
+robotObjectTranslation = [-173.89 -317.3 zDiff]; % Old values: X: 341, Y: -108.8
+% Define the rotation between the robot base frame and the object frame
+% ----- OLD -----
+% It is rotated 90 degrees clockwise around the z robot axis. The 22.26
+% degrees are from the angle the robot base frame is rotated bt
+% default. It was also read from the teach pendant
+% ----- NEW -----
+% It is rotated 90 degrees counter-clockwise around the z robot axis. The 22.26
+% degrees are from the angle the robot base frame is rotated bt
+% default. It was also read from the teach pendant
+ang = 180+22.05; % Old: 22.26-90
+robotObjectRotation = [cosd(ang) -sind(ang) 0;
+                       sind(ang) cosd(ang)  0;
+                       0         0          1];
+% Define transformation matrix from robot frame to object frame
+TObjectRobot = [robotObjectRotation robotObjectTranslation';
+                0 0 0 1];
+% Get the point cloud points
+points = cloud.Location;
+% Apply transformation to point cloud points. This operation is defined
+% for column-vectors
+transformedPoints = TObjectRobot * [points ones(size(points,1),1)]';
+transformedCloud = pointCloud(transformedPoints(1:3,:)');
+scatter3(transformedCloud.Location(:,1),transformedCloud.Location(:,2),transformedCloud.Location(:,3),5,transformedCloud.Location(:,3))
+hold off
+title('Recorded trajectories')
+xlabel('X [mm]')
+ylabel('Y [mm]')
+zlabel('Z [mm]')
+
+%% Mads plot 2
+% Constants
+% Height of the tool, plus the padding mounted on it. Just cardboard is
+% 3 mm
+toolHeight = 45 + 40; % [mm]
+% Z-difference between robot base frame and TCP when the tool is
+% touching the table
+robotTCPZdiff = 42.78; % [mm] # Value on old setup: 16
+% Z-difference from robot base frame to table surface
+zDiff = robotTCPZdiff - toolHeight;
+
+% Step 1:
+% Loading of the recorded trajectory. Transformations are from the
+% robot base frame to the TCP frame
+trajectory = readtable('gmm_gmr_traj.csv'); % Old is tcptrial1.csv
+% Rename table names
+trajectory.Properties.VariableNames = ["ns","s","X","Y","Z","W","WX","WY","WZ"];
+% Extract translation and rotation into matrix
+TCPTrajectory = trajectory{:,["X","Y","Z","W","WX","WY","WZ"]};
+% Change units of translation into mm
+TCPTrajectory(:,1:3) = TCPTrajectory(:,1:3) * 1000; 
+% Save a copy for displaying
+TCPTrajectoryCopy = TCPTrajectory;
+% Initialize matrix for storing tool trajectory. First three elements
+% are translation, while element 4:6 is the first row vector of the
+% rotation matrix, 7:9 the second, and 10:12 the third
+toolTrajectory = zeros(size(TCPTrajectory,1),12);
+
+% Step 2:
+% Define the transformation from the TCP frame to the tool frame. 
+% This is just an extension of TCP frame along its z-axis
+TTCPTool = [1 0 0 0;
+            0 1 0 0;
+            0 0 1 toolHeight;
+            0 0 0 1];
+% Calculate transformation from the robot base frame to the tool frame 
+% by multiplying the transformation from robot base frame to TCP frame 
+% with the transformation for TCP frame to tool frame
+for i = 1:size(TCPTrajectory,1)
+    orgTranslation = TCPTrajectory(i,1:3);
+    orgRotation = quat2rotm(TCPTrajectory(i,4:7));
+    orgTransformation = [orgRotation orgTranslation';
+                         0 0 0 1];
+    newTransform = orgTransformation * TTCPTool;
+    toolTrajectory(i,1:3) = newTransform(1:3,4);
+    toolTrajectory(i,4:12) = reshape(newTransform(1:3,1:3),[1 9]);
+end
+
+% Step 3:
+% Define the translation between the robot base frame and the object 
+% frame. This translation was measured by placing the robot in the
+% object base frame and reading the values from the teach pendant
+robotObjectTranslation = [-173.89 -317.3 zDiff]; % Old values: X: 341, Y: -108.8
+% Define the rotation between the robot base frame and the object frame
+% ----- OLD -----
+% It is rotated 90 degrees clockwise around the z robot axis. The 22.26
+% degrees are from the angle the robot base frame is rotated bt
+% default. It was also read from the teach pendant
+% ----- NEW -----
+% It is rotated 90 degrees counter-clockwise around the z robot axis. The 22.26
+% degrees are from the angle the robot base frame is rotated bt
+% default. It was also read from the teach pendant
+ang = 180+22.05; % Old: 22.26-90
+robotObjectRotation = [cosd(ang) -sind(ang) 0;
+                       sind(ang) cosd(ang)  0;
+                       0         0          1];
+% Define transformation matrix from robot frame to object frame
+TObjectRobot = [robotObjectRotation robotObjectTranslation';
+                0 0 0 1];
+% Get the point cloud points
+points = cloud.Location;
+% Apply transformation to point cloud points. This operation is defined
+% for column-vectors
+transformedPoints = TObjectRobot * [points ones(size(points,1),1)]';
+transformedCloud = pointCloud(transformedPoints(1:3,:)');
+
+% Step 4:
+% Optionally, display data
+if ishandle(4) == true
+    close(4)
+end
+figure(30)
+hold on
+% Change the view of the 3D figure
+view(-45,35);
+% Plotting tool trajectory
+plot3(toolTrajectory(:,1),toolTrajectory(:,2),toolTrajectory(:,3),'ob')
+scatter3(transformedCloud.Location(:,1),transformedCloud.Location(:,2),transformedCloud.Location(:,3),5,transformedCloud.Location(:,3))
+hold off
+title('Output trajectory GMM-GMR')
+xlabel('X [mm]')
+ylabel('Y [mm]')
+zlabel('Z [mm]')
+
+%% Save forces to file
+fileID =  fopen("forces.txt",'w');
+fprintf(fileID,'%f\n',estimationMatrix(:,3));
+fclose(fileID);
+
+%% Estimate actual pressure
+% Must have the correct estimation matrix defined from contact area estimation
+% Also defined the pressure the force was calculated from
+contactPressure = 718 * 2.5;
+if ishandle(50) == true
+    close(50)
+end
+measuredForces = readtable('wrenchtop.csv'); % Old is tcptrial1.csv
+% Rename table names
+measuredForces.Properties.VariableNames = ["ns","s","X","Y","Z","TX","TY","TZ",];
+measuredZForce = measuredForces{:,"Z"};
+pressures = zeros(1,size(measuredZForce,1));
+constPressure = ones(1,size(measuredZForce,1)) * contactPressure;
+for i = 1:size(measuredZForce,1)
+    if estimationMatrix(i,2) < A * 10^-6 * 0.05
+        pressures(i) = 0;
+    else
+        pressures(i) = (measuredZForce(i,1) * -1) / estimationMatrix(i,2);
+    end
+end
+figure(50)
+hold on
+plot(1:size(pressures,2), pressures,'-b')
+plot(1:size(pressures,2), constPressure,'-r')
+title(strcat('Actual contact pressure p calculated from measured force data'))
+xlabel('Test trajectory point')
+ylabel('Estimated contact pressure [Pa]')
+ylim([0,max(pressures)])
+hold off
+
+%% Plot estimated contact force
+figure(6)
+plot(1:trajectorySize, estimationMatrix(:,3))
+title(strcat('With desired contact pressure p = ', num2str(desiredToolPressure), ' [Pa]'))
+xlabel('Test trajectory point')
+ylabel('Estimated contact force [N]')
+
+%% Plot trajectory point
+trajectoryPointDisplay = 9623;
+if ishandle(60) == true
+    close(60)
+end
+f = figure(60);
+f.Position = [100 100 700 500];
+hold on
+if useTestTrajectory == true
+    plot3(testTrajectory(:,1),testTrajectory(:,2),testTrajectory(:,3))
+else
+    plot3(toolTrajectory(:,1),toolTrajectory(:,2),toolTrajectory(:,3))
+end
+mesh(reshape(discretizedToolPlanePoints(:,1,trajectoryPointDisplay), ...
+             [toolPlaneDiscretizationStep toolPlaneDiscretizationStep]), ...
+     reshape(discretizedToolPlanePoints(:,2,trajectoryPointDisplay), ...
+             [toolPlaneDiscretizationStep toolPlaneDiscretizationStep]), ...
+     reshape(discretizedToolPlanePoints(:,3,trajectoryPointDisplay), ...
+             [toolPlaneDiscretizationStep toolPlaneDiscretizationStep]))
+% Since pointsInRange and pointsInContact are stored in one big matrix, 
+% ignore zeros to get the actual points
+nonZeroCondInRange = pointsInRange(:,1,trajectoryPointDisplay) ~= 0;
+nonZeroCondInContact = pointsInContact(:,1,trajectoryPointDisplay) ~= 0;
+scatter3(pointsInRange(nonZeroCondInRange,1,trajectoryPointDisplay), ...
+      pointsInRange(nonZeroCondInRange,2,trajectoryPointDisplay), ...
+      pointsInRange(nonZeroCondInRange,3,trajectoryPointDisplay),3,'r')
+scatter3(pointsInContact(nonZeroCondInContact,1,trajectoryPointDisplay), ...
+      pointsInContact(nonZeroCondInContact,2,trajectoryPointDisplay), ...
+      pointsInContact(nonZeroCondInContact,3,trajectoryPointDisplay),3,'b')
+title('Trajectory, fitted plane in a point, in range points in red and in contact points in blue')
+xlabel('X [mm]')
+ylabel('Y [mm]')
+zlabel('Z [mm]')
+view(-80,20);
+hold off
