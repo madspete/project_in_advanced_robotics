@@ -1,5 +1,5 @@
 // local files
-#include "trajectory_learning/gmm_gmr.hpp"
+#include "trajectory_learning/gmm_gmr_joint.hpp"
 #include "trajectory_learning/demonstrated_trajectories.hpp"
 
 
@@ -7,6 +7,7 @@
 #include <ros/ros.h>
 #include <cartesian_trajectory_interpolation/cartesian_trajectory.h>
 #include <cartesian_control_msgs/CartesianTrajectory.h>
+#include <trajectory_msgs/JointTrajectory.h>
 
 // Other
 #include <fstream>
@@ -17,14 +18,14 @@
 namespace trajectory_learning
 {
 
-GMMAndGMR::GMMAndGMR()
+GMMAndGMRJoint::GMMAndGMRJoint()
 {
   trajectories_loaded_ = false;
   model_learned_ = false;
 }
 
 
-GMMAndGMR::GMMAndGMR(const char *trajectory_path)
+GMMAndGMRJoint::GMMAndGMRJoint(const char *trajectory_path)
 {
   trajectories_loaded_ = false;
   model_learned_ = false;
@@ -32,7 +33,7 @@ GMMAndGMR::GMMAndGMR(const char *trajectory_path)
   
 }
 
-void GMMAndGMR::load_trajectories(const char *trajectory_path)
+void GMMAndGMRJoint::load_trajectories(const char *trajectory_path)
 {
   path_ = trajectory_path;
   get_trajectory_filenames();
@@ -40,7 +41,7 @@ void GMMAndGMR::load_trajectories(const char *trajectory_path)
   trajectories_loaded_ = true;
 }
 
-void GMMAndGMR::load_model(std::string model_path)
+void GMMAndGMRJoint::load_model(std::string model_path)
 {
   if (!gmm_model_.load(model_path))
   {
@@ -50,7 +51,7 @@ void GMMAndGMR::load_model(std::string model_path)
   model_learned_ = true;
 }
 
-void GMMAndGMR::save_model(std::string model_path)
+void GMMAndGMRJoint::save_model(std::string model_path)
 {
   if (!gmm_model_.save(model_path))
   {
@@ -59,48 +60,31 @@ void GMMAndGMR::save_model(std::string model_path)
   }
 }
 
-void GMMAndGMR::gmm_learn(int k, const arma::gmm_dist_mode& dist, const arma::gmm_seed_mode& seed, int km_iter, int em_iter, double err, bool print_mode)
+void GMMAndGMRJoint::gmm_learn(int k, const arma::gmm_dist_mode& dist, const arma::gmm_seed_mode& seed, int km_iter, int em_iter, double err, bool print_mode)
 {
   if (trajectories_loaded_ == false)
   {
     std::cout << "please go ahead and load trajectories first " << std::endl;
     return;
   }
-  for (unsigned int i = 0; i < aligned_demonstrated_trajectories_.size(); ++i)
-  {
-    std::vector<std::vector<double> > cur_trajectory = aligned_demonstrated_trajectories_.get_trajectory(i);
-    arma::vec4 last_ori;
-    for (unsigned int j = 0; j < cur_trajectory.size(); ++j)
-    {
-      // Handle sign change
-      if (j != 0)
-      {
-        double dot = last_ori[0]*cur_trajectory[j][3] + last_ori[1]*cur_trajectory[j][4] +
-                    last_ori[2]*cur_trajectory[j][5] + last_ori[3]*cur_trajectory[j][6];
-        if (dot < 0.0)
-        {
-          std::cout << "flipping sign" << std::endl;
-          cur_trajectory[j][3] = cur_trajectory[j][3] * -1;
-          cur_trajectory[j][4] = cur_trajectory[j][4] * -1;
-          cur_trajectory[j][5] = cur_trajectory[j][5] * -1;
-          cur_trajectory[j][6] = cur_trajectory[j][6] * -1;
-        }
-      }
-      last_ori.at(0) = cur_trajectory[j][3];
-      last_ori.at(1) = cur_trajectory[j][4];
-      last_ori.at(2) = cur_trajectory[j][5];
-      last_ori.at(3) = cur_trajectory[j][6];
-    }
-    aligned_demonstrated_trajectories_.set_trajectory(i, cur_trajectory);
-  } 
-  arma::uword d = 8;       // dimensionality
+  arma::uword d = 7;       // dimensionality
   std::vector<std::vector<double> > all_trajectories_as_one = aligned_demonstrated_trajectories_.get_all_as_one();
   arma::uword N = aligned_demonstrated_trajectories_.total_size();
   arma::mat data(d, N, arma::fill::zeros);
 
+  // Write to a file here and plot with python
+  std::ofstream myfile;
+  myfile.open ("/home/mads/git/project_in_advanced_robotics/trajectory_learning/BIC/combined.csv");
+  for (unsigned int i = 0; i < N; ++i)
+  {
+    myfile << all_trajectories_as_one[i][0] << " " << all_trajectories_as_one[i][1] << " " << all_trajectories_as_one[i][2] << " "
+           << all_trajectories_as_one[i][3] << " " << all_trajectories_as_one[i][4] << " "  << all_trajectories_as_one[i][5] << " "
+           << all_trajectories_as_one[i][6] << "\n";
+  }
+
   unsigned int i = 0; 
   while (i < N)
-  {
+  { 
     arma::Col<double> col_vector(all_trajectories_as_one[i]);
     data.col(i) = col_vector;
     ++i;
@@ -116,7 +100,7 @@ void GMMAndGMR::gmm_learn(int k, const arma::gmm_dist_mode& dist, const arma::gm
   model_learned_ = true;
 }
 
-void GMMAndGMR::gmr_calculation(arma::mat& target, std::vector<double> x, std::vector<unsigned int> in, std::vector<unsigned int> out)
+void GMMAndGMRJoint::gmr_calculation(arma::mat& target, std::vector<double> x, std::vector<unsigned int> in, std::vector<unsigned int> out)
 {
   // Create sub matrices 
   arma::mat input_means(in.size(), gmm_model_.n_gaus(), arma::fill::zeros);
@@ -179,7 +163,7 @@ void GMMAndGMR::gmr_calculation(arma::mat& target, std::vector<double> x, std::v
   target = expected_means;
 }
 
-void GMMAndGMR::gmr_calculation_fast_gmm(std::vector<Vector>& target, std::vector<double> x, std::vector<unsigned int> in, std::vector<unsigned int> out)
+void GMMAndGMRJoint::gmr_calculation_fast_gmm(std::vector<Vector>& target, std::vector<double> x, std::vector<unsigned int> in, std::vector<unsigned int> out)
 {
   // Prepare data
   std::vector<double> priors;
@@ -221,12 +205,12 @@ void GMMAndGMR::gmr_calculation_fast_gmm(std::vector<Vector>& target, std::vecto
   }
 }
 
-double GMMAndGMR::get_end_time()
+double GMMAndGMRJoint::get_end_time()
 {
   return end_time_;
 }
 
-void GMMAndGMR::prepare_gmr_data(std::vector<unsigned int> in, std::vector<unsigned int> out,
+void GMMAndGMRJoint::prepare_gmr_data(std::vector<unsigned int> in, std::vector<unsigned int> out,
                                  arma::mat& input_means, arma::mat& output_means,
                                  std::vector<arma::mat>& sigma_out, std::vector<arma::mat>& sigma_in, 
                                  std::vector<arma::mat>& sigma_in_out, std::vector<arma::mat>& sigma_out_in)
@@ -296,14 +280,14 @@ void GMMAndGMR::prepare_gmr_data(std::vector<unsigned int> in, std::vector<unsig
   }
 }
 
-void GMMAndGMR::print_data()
+void GMMAndGMRJoint::print_data()
 {
   std::cout << "means " << gmm_model_.means << std::endl;
   std::cout << "prior " << gmm_model_.hefts << std::endl;
   std::cout << "cov " << gmm_model_.fcovs << std::endl;
 }
 
-void GMMAndGMR::write_data_to_file(std::string filepath_means, std::string filepath_cov, std::string filepath_priors)
+void GMMAndGMRJoint::write_data_to_file(std::string filepath_means, std::string filepath_cov, std::string filepath_priors)
 {
   std::ofstream myfile;
   myfile.open (filepath_means);
@@ -323,7 +307,7 @@ void GMMAndGMR::write_data_to_file(std::string filepath_means, std::string filep
   myfile.close();
 }
 
-void GMMAndGMR::get_trajectory_filenames()
+void GMMAndGMRJoint::get_trajectory_filenames()
 {
   struct dirent *entry;
   DIR *dir = opendir(path_);
@@ -344,10 +328,9 @@ void GMMAndGMR::get_trajectory_filenames()
   closedir(dir);
 }
 
-std::vector<std::vector<double>> GMMAndGMR::get_trajectory(std::string file)
+std::vector<std::vector<double>> GMMAndGMRJoint::get_trajectory(std::string file)
 {
   std::vector<std::vector<double>> trajectory;
-  std::vector<std::vector<double>> move_trajectory;
   std::ifstream myfile;
   myfile.open(file);
   if (myfile.is_open())
@@ -356,54 +339,13 @@ std::vector<std::vector<double>> GMMAndGMR::get_trajectory(std::string file)
     while (std::getline(myfile, line, '\n'))
     {
       std::stringstream ss(line);
-      unsigned int idx = 0;
       std::string data;
       std::vector<double> elems;
       while (getline(ss, data, ','))
       {
-        if (idx <= 1)
-        {
-          idx += 1;
-          continue;
-        }
-        idx += 1;
         elems.push_back(atof(data.c_str()));
       }
       trajectory.push_back(elems);
-    }
-    // This is used to detect when the robot starts moving, might be needed or might not be needed.
-    double start_x = trajectory[0][0];
-    double start_y = trajectory[0][1];
-    double end_x = trajectory[trajectory.size()- 1][0];
-    double end_y = trajectory[trajectory.size()- 1][1];
-    unsigned int end_idx = 0;
-    for (unsigned int i = trajectory.size() - 1; i >= 0; --i)
-    {
-      double dist = sqrt(pow(end_x - trajectory[i][0], 2)
-                + pow(end_y - trajectory[i][1], 2) * 1.0);
-      if (dist > 0.0001)
-      {
-        end_idx = i;
-        break;
-      }
-    }
-    bool trajectory_started = true;
-    for (unsigned int i = 1; i < trajectory.size(); ++i)
-    {
-      double dist = sqrt(pow(start_x - trajectory[i][0], 2)
-                + pow(start_y - trajectory[i][1], 2) * 1.0);
-      if (dist > 0.0001)
-      {
-        trajectory_started = true;
-      }
-      if (trajectory_started == true && i <= end_idx)
-      {
-        move_trajectory.push_back(trajectory[i]);
-      }
-      if (i > end_idx)
-      {
-        break;
-      }
     }
   }
   else
@@ -413,7 +355,7 @@ std::vector<std::vector<double>> GMMAndGMR::get_trajectory(std::string file)
   return trajectory;
 }
 
-void GMMAndGMR::align_trajectories()
+void GMMAndGMRJoint::align_trajectories()
 {
   DemonstratedTrajectories demonstrated_trajectories;
   if (trajectory_filenames_.empty())
@@ -442,13 +384,12 @@ void GMMAndGMR::align_trajectories()
         longest_traj_idx = i;
       }
     }
-    std::vector<ros_controllers_cartesian::CartesianTrajectory> traj;
-
     std::vector<std::vector<double>> longest_traj = demonstrated_trajectories.get_trajectory(longest_traj_idx);
     double step = 10.0 / longest_traj.size();
     // This is used to store the correct timing as the data points are collected with this frequenzy
     double ur_step = 0.002;
 
+    std::vector<std::vector<JointSegment> > traj;
     for (unsigned int i = 0; i < demonstrated_trajectories.size(); ++i)
     {
       if (i == longest_traj_idx)
@@ -457,26 +398,32 @@ void GMMAndGMR::align_trajectories()
       }
       double temp_step = 10.0 / demonstrated_trajectories.get_trajectory(i).size();
       double cur_time = 0.0;
-      cartesian_control_msgs::CartesianTrajectory traj_msg;
-      // maybe as input
-      traj_msg.header.frame_id = "tool0";
       std::vector<std::vector<double>> cur_traj = demonstrated_trajectories.get_trajectory(i);
-      for (unsigned int j = 0; j < cur_traj.size(); ++j)
+      std::vector<JointSegment> jointSegments;
+      for (unsigned int j = 0; j < cur_traj.size()-1; ++j)
       {
-        cartesian_control_msgs::CartesianTrajectoryPoint point;
-        ros::Duration dur(cur_time);
-        point.time_from_start = dur;
-        point.pose.position.x = cur_traj[j][0];
-        point.pose.position.y = cur_traj[j][1];
-        point.pose.position.z = cur_traj[j][2];
-        point.pose.orientation.w = cur_traj[j][3];
-        point.pose.orientation.x = cur_traj[j][4];
-        point.pose.orientation.y = cur_traj[j][5];
-        point.pose.orientation.z = cur_traj[j][6];
-        traj_msg.points.push_back(point);
-        cur_time += temp_step;
+        std::vector<double> point;
+        std::vector<double> next_point;
+        point.push_back(cur_traj[j][0]);
+        point.push_back(cur_traj[j][1]);
+        point.push_back(cur_traj[j][2]);
+        point.push_back(cur_traj[j][3]);
+        point.push_back(cur_traj[j][4]);
+        point.push_back(cur_traj[j][5]);
+        double start_time = cur_time;
+
+        next_point.push_back(cur_traj[j+1][0]);
+        next_point.push_back(cur_traj[j+1][1]);
+        next_point.push_back(cur_traj[j+1][2]);
+        next_point.push_back(cur_traj[j+1][3]);
+        next_point.push_back(cur_traj[j+1][4]);
+        next_point.push_back(cur_traj[j+1][5]);
+        double end_time = cur_time + temp_step;
+        cur_time = end_time;
+        JointSegment segment(point, next_point, start_time, end_time);
+        jointSegments.push_back(segment);
       }
-      traj.push_back(traj_msg);
+      traj.push_back(jointSegments);
     }
     double time = 0.0;
     std::vector<std::vector<double>> cur_timed_traj;
@@ -490,29 +437,45 @@ void GMMAndGMR::align_trajectories()
     }
     end_time_ = time;
     aligned_demonstrated_trajectories_.add_trajectory(cur_timed_traj);
+
+    std::vector<trajectory_msgs::JointTrajectory> trajectory_msgs;
+    
     for (unsigned int i = 0; i < traj.size(); ++i)
     {
       time = 0.0;
-      std::vector<std::vector<double>> cur_timed_traj;
-      for (double j = 0.0; j < 10; j = j + step)
+      std::vector<std::vector<double>> interpolated_traj;
+      for (double j = 0; j < 10-step; j = j + step)
       {
-        ros_controllers_cartesian::CartesianState desired;
-        traj[i].sample(j, desired);
-        std::vector<double> elems;
-        elems.push_back(desired.p.x());
-        elems.push_back(desired.p.y());
-        elems.push_back(desired.p.z());
-        elems.push_back(desired.q.w());
-        elems.push_back(desired.q.x());
-        elems.push_back(desired.q.y());
-        elems.push_back(desired.q.z());
+        unsigned int index = 0;
+        for (unsigned int k = 0; k < traj[i].size(); ++k)
+        {
+          if (traj[i][k].start >= j && j <= traj[i][k].end)
+          {
+            index = k;
+            break;
+          }
+        }
+        std::vector<double> elems = traj[i][index].interpolate(j);
         elems.push_back(time);
         time += ur_step;
-        cur_timed_traj.push_back(elems);
+        interpolated_traj.push_back(elems);
       }
-      aligned_demonstrated_trajectories_.add_trajectory(cur_timed_traj);
+      aligned_demonstrated_trajectories_.add_trajectory(interpolated_traj);
     }
   }
+  /*for (unsigned int i = 0; i < aligned_demonstrated_trajectories_.size(); ++i)
+  {
+
+    std::ofstream myfile;
+    std::string filename = "/home/mads/git/project_in_advanced_robotics/traj" + std::to_string(i) + ".csv"; 
+    myfile.open (filename.c_str());
+    std::vector<std::vector<double>> traj_temp =  aligned_demonstrated_trajectories_.get_trajectory(i);
+    for (int i = 0; i < traj_temp.size(); i++)
+    {
+      myfile << traj_temp[i][0] << "," << traj_temp[i][1] << "," << traj_temp[i][2] << "," << traj_temp[i][3] << "," << traj_temp[i][4] << "," << traj_temp[i][5] << "," << traj_temp[i][6] << "\n";
+    }
+    myfile.close();
+  }*/
 }
 
 } // namespace

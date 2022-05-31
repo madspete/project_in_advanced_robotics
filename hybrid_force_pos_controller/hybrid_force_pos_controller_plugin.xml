@@ -1,0 +1,11 @@
+<library path="lib/libhybrid_force_pos_controller">
+
+  <class name="position_controllers/HybridForcePosController"
+         type="position_controllers::HybridForcePosController"
+         base_class_type="controller_interface::ControllerBase">
+    <description>
+      The HybridForcePosController implements a hybrid force position controller.
+    </description>
+  </class>
+
+</library>

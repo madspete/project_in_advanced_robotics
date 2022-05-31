@@ -1,0 +1,11 @@
+<library path="lib/libadmittance_controller">
+
+  <class name="velocity_controllers/admittance_controller"
+         type="velocity_controllers::admittance_controller"
+         base_class_type="controller_interface::ControllerBase">
+    <description>
+      The admittance controller implements an admittance controller.
+    </description>
+  </class>
+
+</library>

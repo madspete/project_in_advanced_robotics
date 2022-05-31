@@ -12,6 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   cartesian_trajectory_interpolation
   sgaussians
   mathlib
+  hybrid_force_pos_controller
+  joint_trajectory_controller
 )
 
 #find_package(ARMADILLO REQUIRED)
@@ -129,7 +131,16 @@ add_library(${PROJECT_NAME}
   include/trajectory_learning/demonstrated_trajectories.hpp
 )
 
+add_library(${PROJECT_NAME}_joint
+  src/gmm_gmr_joint.cpp
+  include/trajectory_learning/gmm_gmr_joint.hpp
+  include/trajectory_learning/demonstrated_trajectories.hpp
+)
+
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} armadillo)
+
+target_link_libraries(${PROJECT_NAME}_joint ${catkin_LIBRARIES} armadillo)
+
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -144,6 +155,16 @@ add_executable(
   src/gmm_gmr_node.cpp
 )
 
+add_executable(
+  ${PROJECT_NAME}_gmm_joint
+  src/gmm_gmr_node_joint.cpp
+)
+
+add_executable(
+  ${PROJECT_NAME}_exec_traj
+  src/execute_traj.cpp
+)
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -154,9 +175,26 @@ add_executable(
 ## same as for the library above
 add_dependencies(${PROJECT_NAME}_gmm ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+add_dependencies(${PROJECT_NAME}_gmm_joint ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+
+add_dependencies(${PROJECT_NAME}_exec_traj ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_gmm
   ${catkin_LIBRARIES}
   armadillo
   ${PROJECT_NAME}
+)
+
+target_link_libraries(${PROJECT_NAME}_gmm_joint
+  ${catkin_LIBRARIES}
+  armadillo
+  ${PROJECT_NAME}_joint
+)
+
+target_link_libraries(${PROJECT_NAME}_exec_traj
+  ${catkin_LIBRARIES}
+  armadillo
+  ${PROJECT_NAME}_joint
 )
